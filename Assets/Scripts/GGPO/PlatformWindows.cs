@@ -24,8 +24,11 @@ namespace GGPort {
 
 		public static int GetProcessID() { return Process.GetCurrentProcess().Id; }
 
-		public static void AssertFailed(string msg) { // NOTE LOG
-			MessageBoxA(NULL, msg, "GGPO Assertion Failed", MB_OK | MB_ICONEXCLAMATION);
+		public static void AssertFailed(string msg) {
+			Console.WriteLine(msg);
+			Debugger.Break();
+			// TODO
+			//MessageBoxA(NULL, msg, "GGPO Assertion Failed", MB_OK | MB_ICONEXCLAMATION);
 		}
 
 		public static long GetCurrentTimeMS() { return DateTime.Now.ToFileTimeUtc(); }

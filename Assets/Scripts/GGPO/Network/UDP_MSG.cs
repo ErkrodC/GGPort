@@ -43,21 +43,26 @@ namespace GGPort {
 			public readonly uint pong;
 		}
 
-		public unsafe struct Input {
-			// TODO connect_status fields should be here to create fixed size array of them, then make a getter for this prop using a single index
-			public fixed connect_status peer_connect_status[UDP_MSG_MAX_PLAYERS];
+		public fixed unsafe struct Input {
+			public connect_status peer_connect_status;
 
 			public readonly uint start_frame;
 
+			// TODO address bitfields
 			public readonly int disconnect_requested;//:1;
 			public readonly int ack_frame;//:31;
 
 			public readonly ushort num_bits;
 			public readonly byte input_size; // XXX: shouldn't be in every single packet!
 			public fixed byte bits[MAX_COMPRESSED_BITS]; /* must be last */
+
+			public Input(byte* bits) : this() {
+				this.bits[0] = 1;
+			}
 		}
 
 		public struct InputAck{
+			// TODO address bitfields
 			public readonly int ack_frame;//:31;
 		}
 
@@ -107,10 +112,11 @@ namespace GGPort {
 			KeepAlive     = 6,
 			InputAck      = 7,
 		};
-
-		public struct connect_status {
-			public readonly uint disconnected;//:1;
-			public readonly int last_frame;//:31;
+		
+		// TODO address bitfields
+		public unsafe struct connect_status {
+			public fixed uint disconnected[UDP_MSG_MAX_PLAYERS];//:1;
+			public fixed int last_frame[UDP_MSG_MAX_PLAYERS];//:31;
 		};
 		
 		public struct HDR {

@@ -7,6 +7,7 @@ namespace GGPort {
 		public static string logbuf = null;
 		
 		// TODO these two are the same...
+		// TODO might be better to just kick these since c# has easier string formatting.
 		public static void Log(string fmt, params object[] args) {
 			Logv(fmt, args);
 		}

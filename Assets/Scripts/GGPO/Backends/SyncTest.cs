@@ -34,7 +34,7 @@ namespace GGPort {
 			 * Initialize the synchronziation layer
 			 */
 			Sync.Config config = new Sync.Config(_callbacks, Sync.MAX_PREDICTION_FRAMES);
-			_sync.Init(config);
+			_sync.Init(ref config);
 
 			/*
 			 * Preload the ROM

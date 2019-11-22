@@ -8,13 +8,15 @@
 // GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS * 8 must be less than
 // 2^BITVECTOR_NIBBLE_SIZE (see bitvector.h)
 
-namespace GGPort {
+namespace GGPort { // NOTE LOH, still need to fix format strings in InputQueue.cs.
+                   // NOTE could just change sig to pass interp'd string as arg and be done rid of fmt string altogether....that sounds nice.....
 	public unsafe struct GameInput {
 		public const int GAMEINPUT_MAX_BYTES = 9;
 		public const int GAMEINPUT_MAX_PLAYERS = 2;
+		public const int NullFrame = -1;
 		
-		public readonly int frame;
-		public readonly int size; /* size in bytes of the entire input for all players */
+		public int frame { get; set; }
+		public int size { get; set; } /* size in bytes of the entire input for all players */
 		public fixed byte bits[GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS];
 
 		public bool is_null() {
@@ -42,6 +44,6 @@ namespace GGPort {
 		
 		public void desc(char *buf, size_t buf_size, bool show_frame = true);
 		public void log(char *prefix, bool show_frame = true);
-		public bool equal(GameInput &input, bool bitsonly = false);
+		public bool equal(ref GameInput input, bool bitsonly = false);
 	};
 }

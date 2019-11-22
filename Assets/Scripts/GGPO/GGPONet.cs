@@ -190,7 +190,7 @@ namespace GGPort {
 		* free_buffer - Frees a game state allocated in save_game_state.  You
 		* should deallocate the memory contained in the buffer.
 		*/
-		public delegate void FreeBufferDelegate(object[] buffer);
+		public delegate void FreeBufferDelegate(byte[] buffer);
 		public readonly FreeBufferDelegate free_buffer;
 
 		/*
