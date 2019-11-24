@@ -253,9 +253,10 @@ namespace GGPort {
 		public static GGPOErrorCode ggpo_get_network_stats(
 			ref GGPOSession ggpo,
 			GGPOPlayerHandle player,
-			ref GGPONetworkStats stats
+			out GGPONetworkStats stats
 		) {
-			return ggpo?.GetNetworkStats(stats, player) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
+			stats = default;
+			return ggpo?.GetNetworkStats(out stats, player) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
 		}
 
 		/*
@@ -270,7 +271,7 @@ namespace GGPort {
 		*
 		* timeout - The time in milliseconds to wait before disconnecting a peer.
 		*/
-		public static GGPOErrorCode ggpo_set_disconnect_timeout(ref GGPOSession ggpo, int timeout) {
+		public static GGPOErrorCode ggpo_set_disconnect_timeout(ref GGPOSession ggpo, uint timeout) {
 			return ggpo?.SetDisconnectTimeout(timeout) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
 		}
 
@@ -283,7 +284,7 @@ namespace GGPort {
 		* timeout - The amount of time which needs to elapse without receiving a packet
 		*           before the GGPO_EVENTCODE_NETWORK_INTERRUPTED event is sent.
 		*/
-		public static GGPOErrorCode ggpo_set_disconnect_notify_start(ref GGPOSession ggpo, int timeout) {
+		public static GGPOErrorCode ggpo_set_disconnect_notify_start(ref GGPOSession ggpo, uint timeout) {
 			return ggpo?.SetDisconnectNotifyStart(timeout) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
 		}
 
@@ -295,18 +296,8 @@ namespace GGPort {
 		* variable is set to 1.  This will change in future versions of the
 		* SDK.
 		*/
-		public static void ggpo_log(ref GGPOSession ggpo, string fmt, params object[] args) {
-			ggpo_logv(ref ggpo, fmt, args);
-		}
-	
-		/*
-		* ggpo_logv --
-		*
-		* A varargs compatible version of ggpo_log.  See ggpo_log for
-		* more details.
-		*/
-		public static void ggpo_logv(ref GGPOSession ggpo, string fmt, params object[] args) {
-			ggpo?.Logv(fmt, args);
+		public static void ggpo_log(ref GGPOSession ggpo, string msg) {
+			ggpo?.Log(msg);
 		}
 	}
 }

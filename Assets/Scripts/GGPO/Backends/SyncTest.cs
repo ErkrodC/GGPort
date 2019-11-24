@@ -42,11 +42,11 @@ namespace GGPort {
 			_callbacks.begin_game(gamename);
 		}
 
-		public virtual GGPOErrorCode DoPoll(int timeout) {
+		public override GGPOErrorCode DoPoll(int timeout) {
 			if (!_running) {
 				GGPOEvent info = new GGPOEvent(GGPOEventCode.GGPO_EVENTCODE_RUNNING);
 				
-				_callbacks.on_event(info);
+				_callbacks.on_event(ref info);
 				_running = true;
 			}
 			return GGPOErrorCode.GGPO_OK;
@@ -101,7 +101,7 @@ namespace GGPort {
 			_sync.IncrementFrame();
 			_current_input.erase();
    
-			LogUtil.Log("End of frame({0})...\n", _sync.GetFrameCount());
+			LogUtil.Log($"End of frame({_sync.GetFrameCount()})...\n");
 			EndLog();
 
 			if (_rollingback) {

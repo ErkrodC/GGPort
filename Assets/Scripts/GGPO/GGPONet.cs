@@ -1,11 +1,16 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Net;
+using System.Runtime.InteropServices;
 
 namespace GGPort {
-	public static class Globals {
+	public static class Globals { // TODO rename?
 		public const int GGPO_MAX_PLAYERS = 4;
 		public const int GGPO_MAX_PREDICTION_FRAMES = 8;
 		public const int GGPO_MAX_SPECTATORS = 32;
 		public const int GGPO_SPECTATOR_INPUT_INTERVAL = 4;
+
+		public static bool GGPO_SUCCEEDED(GGPOErrorCode result) { // TODO rename
+			return result == GGPOErrorCode.GGPO_ERRORCODE_SUCCESS;
+		}
 	}
 
 	public struct GGPOPlayerHandle {
@@ -46,25 +51,27 @@ namespace GGPort {
 	*
 	*/
 
+	[StructLayout(LayoutKind.Explicit)]
 	public struct GGPOPlayer {
-		public readonly int size;
-		public readonly GGPOPlayerType type;
-		public readonly int player_num;
-		public readonly U u;
+		[FieldOffset(0)] public readonly int size;
+		[FieldOffset(4)] public readonly GGPOPlayerType type;
+		[FieldOffset(8)] public readonly int player_num;
+		[FieldOffset(12)] public readonly Local local;
+		[FieldOffset(12)] public readonly Remote remote;
+		
+		public struct Local { }
 
-		[StructLayout(LayoutKind.Explicit)]
-		public struct U {
-			// local is empty???
-			// remote
-			[FieldOffset(0)] public readonly byte[] ip_address;
-			[FieldOffset(1)] public readonly ushort port;
+		public struct Remote {
+			public readonly IPAddress ip_address;
+			public readonly ushort port;
 		}
 	}
 
 	public struct GGPOLocalEndpoint {
 		public readonly int player_num;
 	}
-	   
+	
+	// TODO clean up enum val names
 	public enum GGPOErrorCode {
 		GGPO_OK = 0,
 		GGPO_ERRORCODE_SUCCESS = 0,
@@ -126,20 +133,47 @@ namespace GGPort {
 	*/
 	[StructLayout(LayoutKind.Explicit)]
 	public struct GGPOEvent {
-	   GGPOEventCode code;
+	   public GGPOEventCode code { get; set; }
 	   
 	   // connect, synchronizing, synchronized, disconnected, connection_interrupted, connection_resumed
-	   [FieldOffset(0)] public readonly GGPOPlayerHandle player;
+	   [FieldOffset(4)] public Connected connected;
+	   [FieldOffset(4)] public Synchronizing synchronizing;
+	   [FieldOffset(4)] public Synchronized synchronized;
+	   [FieldOffset(4)] public Disconnected disconnected;
+	   [FieldOffset(4)] public TimeSync timesync;
+	   [FieldOffset(4)] public ConnectionInterrupted connection_interrupted;
+	   [FieldOffset(4)] public ConnectionResumed connection_resumed;
 	   
-	   // synchronizing
-	   [FieldOffset(4)] public readonly int count;
-	   [FieldOffset(8)] public readonly int total;
-
-	   // timesync
-	   [FieldOffset(0)] public readonly int frames_ahead;
+	   public struct Connected {
+		   public GGPOPlayerHandle player { get; set; }
+	   }
 	   
-	   // connection_interrupted
-	   [FieldOffset(4)] public readonly int disconnect_timeout;
+	   public struct Synchronizing {
+		   public GGPOPlayerHandle player { get; set; }
+		   public int count { get; set; }
+		   public int total { get; set; }
+	   }
+	   
+	   public struct Synchronized {
+		   public GGPOPlayerHandle player { get; set; }
+	   }
+	   
+	   public struct Disconnected {
+		   public GGPOPlayerHandle player { get; set; }
+	   }
+	   
+	   public struct TimeSync {
+		   public int frames_ahead { get; set; }
+	   }
+	   
+	   public struct ConnectionInterrupted {
+		   public GGPOPlayerHandle player { get; set; }
+		   public int disconnect_timeout { get; set; }
+	   }
+	   
+	   public struct ConnectionResumed {
+		   public GGPOPlayerHandle player { get; set; }
+	   }
 
 	   public GGPOEvent(GGPOEventCode code) : this() {
 		   this.code = code;
@@ -209,7 +243,7 @@ namespace GGPort {
 		* on_event - Notification that something has happened.  See the GGPOEventCode
 		* structure above for more information.
 		*/
-		public delegate bool OnEventDelegate(GGPOEvent info);
+		public delegate bool OnEventDelegate(ref GGPOEvent info);
 		public readonly OnEventDelegate on_event;
 	}
 
@@ -248,19 +282,19 @@ namespace GGPort {
 	*
 	*/
 	public struct GGPONetworkStats {
-		public readonly Network network;
-		public readonly TimeSync timesync;
+		public Network network;
+		public TimeSync timesync;
 		
 		public struct Network {
-			int send_queue_len;
-			int recv_queue_len;
-			int ping;
-			int kbps_sent;
+			public int send_queue_len { get; set; }
+			public readonly int recv_queue_len;
+			public int ping { get; set; }
+			public int kbps_sent { get; set; }
 		}
 		
 		public struct TimeSync {
-			int local_frames_behind;
-			int remote_frames_behind;
+			public int local_frames_behind { get; set; }
+			public int remote_frames_behind { get; set; }
 		}
 	}
 }

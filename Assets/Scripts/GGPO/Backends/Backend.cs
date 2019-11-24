@@ -1,5 +1,7 @@
 ﻿namespace GGPort {
-	// TODO rename to GGPOSession
+	// TODO this should really be an interface...
+	// XXX need to go through all interfaces and see that the implementers are correctly overriding rather than just hiding
+	// NOTE to that end, incorrect signatures will be a comp error for not implementing interface/abstract functions
 	public abstract class GGPOSession {
 		public virtual GGPOErrorCode DoPoll(int timeout) { return GGPOErrorCode.GGPO_OK; }
 		public abstract GGPOErrorCode AddPlayer(ref GGPOPlayer player, ref GGPOPlayerHandle handle);
@@ -9,12 +11,13 @@
 		public virtual GGPOErrorCode Chat(string text) { return GGPOErrorCode.GGPO_OK; }
 		public virtual GGPOErrorCode DisconnectPlayer(GGPOPlayerHandle handle) { return GGPOErrorCode.GGPO_OK; }
 
-		public virtual GGPOErrorCode GetNetworkStats(GGPONetworkStats stats, GGPOPlayerHandle handle) {
+		public virtual GGPOErrorCode GetNetworkStats(out GGPONetworkStats stats, GGPOPlayerHandle handle) {
+			stats = default;
 			return GGPOErrorCode.GGPO_OK;
 		}
 
-		public virtual GGPOErrorCode Logv(string fmt, params object[] args) {
-			LogUtil.Logv(fmt, args);
+		public virtual GGPOErrorCode Log(string msg) {
+			LogUtil.Log(msg);
 			return GGPOErrorCode.GGPO_OK;
 		}
 
@@ -22,11 +25,11 @@
 			return GGPOErrorCode.GGPO_ERRORCODE_UNSUPPORTED;
 		}
 
-		public virtual GGPOErrorCode SetDisconnectTimeout(int timeout) {
+		public virtual GGPOErrorCode SetDisconnectTimeout(uint timeout) {
 			return GGPOErrorCode.GGPO_ERRORCODE_UNSUPPORTED;
 		}
 
-		public virtual GGPOErrorCode SetDisconnectNotifyStart(int timeout) {
+		public virtual GGPOErrorCode SetDisconnectNotifyStart(uint timeout) {
 			return GGPOErrorCode.GGPO_ERRORCODE_UNSUPPORTED;
 		}
 	}

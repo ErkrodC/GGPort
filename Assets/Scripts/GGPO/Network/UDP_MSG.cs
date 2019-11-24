@@ -16,59 +16,55 @@ namespace GGPort {
 		public const ushort MAX_COMPRESSED_BITS = 4096;
 		public const byte UDP_MSG_MAX_PLAYERS = 4;
 		
-		[FieldOffset(0)] public readonly HDR hdr;
-		[FieldOffset(5)] public readonly SyncRequest sync_request;
-		[FieldOffset(5)] public readonly SyncReply sync_reply;
-		[FieldOffset(5)] public readonly QualityReport quality_report;
-		[FieldOffset(5)] public readonly QualityReply quality_reply;
+		[FieldOffset(0)] public HDR hdr;
+		[FieldOffset(5)] public SyncRequest sync_request;
+		[FieldOffset(5)] public SyncReply sync_reply;
+		[FieldOffset(5)] public QualityReport quality_report;
+		[FieldOffset(5)] public QualityReply quality_reply;
 		[FieldOffset(5)] public readonly Input input;
-		[FieldOffset(5)] public readonly InputAck input_ack;
+		[FieldOffset(5)] public InputAck input_ack;
 		
 		public struct SyncRequest {
-			public readonly uint random_request; /* please reply back with this random data */
+			public uint random_request { get; set; } /* please reply back with this random data */
 			public readonly ushort remote_magic;
 			public readonly byte remote_endpoint;
 		}
 		
 		public struct SyncReply {
-			public readonly uint random_reply; /* OK, here's your random data back */
+			public uint random_reply { get; set; } /* OK, here's your random data back */
 		}
 		
 		public struct QualityReport {
-			public readonly sbyte frame_advantage; /* what's the other guy's frame advantage? */
-			public readonly uint ping;
+			public sbyte frame_advantage { get; set; } /* what's the other guy's frame advantage? */
+			public long ping { get; set; }
 		}
 		
 		public struct QualityReply {
-			public readonly uint pong;
+			public long pong { get; set; }
 		}
 
-		public fixed unsafe struct Input {
-			public connect_status peer_connect_status;
+		public class Input {
+			public connect_status[] peer_connect_status = new connect_status[UDP_MSG_MAX_PLAYERS];
 
-			public readonly uint start_frame;
+			public uint start_frame { get; set; }
 
 			// TODO address bitfields
-			public readonly int disconnect_requested;//:1;
-			public readonly int ack_frame;//:31;
+			public bool disconnect_requested { get; set; } //:1;
+			public int ack_frame { get; set; } //:31;
 
-			public readonly ushort num_bits;
-			public readonly byte input_size; // XXX: shouldn't be in every single packet!
-			public fixed byte bits[MAX_COMPRESSED_BITS]; /* must be last */
-
-			public Input(byte* bits) : this() {
-				this.bits[0] = 1;
-			}
+			public ushort num_bits { get; set; }
+			public byte input_size { get; set; }  // XXX: shouldn't be in every single packet!
+			public byte[] bits = new byte[MAX_COMPRESSED_BITS]; /* must be last */
 		}
 
-		public struct InputAck{
+		public struct InputAck {
 			// TODO address bitfields
-			public readonly int ack_frame;//:31;
+			public int ack_frame { get; set; } //:31;
 		}
 
 		public UdpMsg(MsgType t) {
 			hdr = new HDR {
-				type = (byte) t
+				type = t
 			};
 
 			sync_request = default;
@@ -80,13 +76,13 @@ namespace GGPort {
 		}
 		
 		// TODO remove unsafe
-		public unsafe int PacketSize() {
+		public readonly unsafe int PacketSize() {
 			return sizeof(HDR) + PayloadSize();
 		}
 
 		// TODO remove unsafe
-		public unsafe int PayloadSize() {
-			switch ((MsgType) hdr.type) {
+		public readonly unsafe int PayloadSize() {
+			switch (hdr.type) {
 				case MsgType.SyncRequest:   return sizeof(SyncRequest);
 				case MsgType.SyncReply:     return sizeof(SyncReply);
 				case MsgType.QualityReport: return sizeof(QualityReport);
@@ -94,7 +90,13 @@ namespace GGPort {
 				case MsgType.InputAck:      return sizeof(InputAck);
 				case MsgType.KeepAlive:     return 0;
 				case MsgType.Input:
-					int size = sizeof(Input) - MAX_COMPRESSED_BITS;
+					int size = 0;
+					size += sizeof(connect_status) * UDP_MSG_MAX_PLAYERS; // NOTE should be size of array pointer?
+					size += sizeof(uint);
+					size += sizeof(int);
+					size += sizeof(int);
+					size += sizeof(ushort);
+					size += sizeof(byte);
 					size += (input.num_bits + 7) / 8;
 					return size;
 			}
@@ -102,7 +104,7 @@ namespace GGPort {
 			throw new ArgumentException();
 		}
 		
-		public enum MsgType {
+		public enum MsgType : byte {
 			Invalid       = 0,
 			SyncRequest   = 1,
 			SyncReply     = 2,
@@ -114,15 +116,15 @@ namespace GGPort {
 		};
 		
 		// TODO address bitfields
-		public unsafe struct connect_status {
-			public fixed uint disconnected[UDP_MSG_MAX_PLAYERS];//:1;
-			public fixed int last_frame[UDP_MSG_MAX_PLAYERS];//:31;
+		public struct connect_status {
+			public bool disconnected;//:1;
+			public int last_frame;//:31;
 		};
 		
 		public struct HDR {
-			public readonly ushort magic;
-			public readonly ushort sequence_number;
-			public byte type; // packet type
+			public ushort magic { get; set; }
+			public ushort sequence_number { get; set; }
+			public MsgType type; // packet type
 		}
 	};
 }

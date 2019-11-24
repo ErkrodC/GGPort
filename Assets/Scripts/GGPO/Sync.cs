@@ -21,6 +21,13 @@ namespace GGPort {
 				this.callbacks = callbacks;
 				num_prediction_frames = numPredictionFrames;
 			}
+
+			public Config(GGPOSessionCallbacks callbacks, int numPredictionFrames, int numPlayers, int inputSize) {
+				this.callbacks = callbacks;
+				num_prediction_frames = numPredictionFrames;
+				num_players = numPlayers;
+				input_size = inputSize;
+			}
 		};
 		
 		public struct Event {
@@ -35,7 +42,7 @@ namespace GGPort {
 			}
 		}
 
-		public Sync(ref UdpMsg.connect_status connect_status) {
+		public Sync(ref UdpMsg.connect_status[] connect_status) {
 			_local_connect_status = connect_status;
 			_input_queues = null;
 			_framecount = 0;
@@ -87,7 +94,7 @@ namespace GGPort {
 				SaveCurrentFrame();
 			}
 
-			LogUtil.Log("Sending undelayed local frame %d to queue %d.\n", _framecount, queue);
+			LogUtil.Log($"Sending undelayed local frame {_framecount} to queue {queue}.\n");
 			input.frame = _framecount;
 			_input_queues[queue].AddInput(ref input);
 
@@ -98,7 +105,7 @@ namespace GGPort {
 			_input_queues[queue].AddInput(ref input);
 		}
 
-		public unsafe int GetConfirmedInputs(ref object[] values, int size, int frame) {
+		public unsafe int GetConfirmedInputs(ref byte* values, int size, int frame) {
 			int disconnect_flags = 0;
 
 			if (size < _config.num_players * _config.input_size) {
@@ -106,12 +113,12 @@ namespace GGPort {
 			}
 
 			for (int i = 0; i < size; i++) {
-				Buffer.SetByte(values, i, 0);
+				values[i] = 0;
 			}
 			
 			for (int i = 0; i < _config.num_players; i++) {
 				GameInput input = new GameInput();
-				if (_local_connect_status.disconnected[i] != 0 && frame > _local_connect_status.last_frame[i]) {
+				if (_local_connect_status[i].disconnected && frame > _local_connect_status[i].last_frame) {
 					disconnect_flags |= (1 << i);
 					input.erase();
 				} else {
@@ -120,7 +127,7 @@ namespace GGPort {
 
 				int startingByteIndex = i * _config.input_size;
 				for (int j = 0; j < _config.input_size; j++) {
-					Buffer.SetByte(values, startingByteIndex + j, input.bits[j]);
+					values[startingByteIndex + j] = input.bits[j];
 				}
 			}
 			return disconnect_flags;
@@ -140,7 +147,7 @@ namespace GGPort {
 			
 			for (int i = 0; i < _config.num_players; i++) {
 				GameInput input = new GameInput();
-				if (_local_connect_status.disconnected[i] != 0 && _framecount > _local_connect_status.last_frame[i]) {
+				if (_local_connect_status[i].disconnected && _framecount > _local_connect_status[i].last_frame) {
 					disconnect_flags |= (1 << i);
 					input.erase();
 				} else {
@@ -202,12 +209,14 @@ namespace GGPort {
 		public int GetFrameCount() { return _framecount; }
 		public bool InRollback() { return _rollingback; }
 
-		public bool GetEvent(ref Event e) {
+		public bool GetEvent(out Event e) {
 			if (_event_queue.size() != 0) {
 				e = _event_queue.front();
 				_event_queue.pop();
 				return true;
 			}
+
+			e = default;
 			return false;
 		}
 		
@@ -256,8 +265,7 @@ namespace GGPort {
 			_savedstate.head = FindSavedFrameIndex(frame);
 			SavedFrame state = _savedstate.frames[_savedstate.head];
 
-			LogUtil.Log("=== Loading frame info {0} (size: {1}  checksum: {2:x8}).\n",
-				state.frame, state.cbuf, state.checksum);
+			LogUtil.Log($"=== Loading frame info {state.frame} (size: {state.cbuf}  checksum: {state.checksum:x8}).\n");
 
 			if (state.buf == null || state.cbuf == 0) {
 				throw new ArgumentException();
@@ -285,8 +293,7 @@ namespace GGPort {
 			state.frame = _framecount;
 			_callbacks.save_game_state(ref state.buf, ref state.cbuf, ref state.checksum, state.frame);
 
-			LogUtil.Log("=== Saved frame info {0} (size: {1}  checksum: {2:x8}).\n",
-				state.frame, state.cbuf, state.checksum);
+			LogUtil.Log($"=== Saved frame info {state.frame} (size: {state.cbuf}  checksum: {state.checksum:x8}).\n");
 			_savedstate.head = (_savedstate.head + 1) % _savedstate.frames.Length;
 		}
 
@@ -324,7 +331,7 @@ namespace GGPort {
 			int first_incorrect = GameInput.NullFrame;
 			for (int i = 0; i < _config.num_players; i++) {
 				int incorrect = _input_queues[i].GetFirstIncorrectFrame();
-				LogUtil.Log("considering incorrect frame %d reported by queue %d.\n", incorrect, i);
+				LogUtil.Log($"considering incorrect frame {incorrect} reported by queue {i}.\n");
 
 				if (incorrect != GameInput.NullFrame && (first_incorrect == GameInput.NullFrame || incorrect < first_incorrect)) {
 					first_incorrect = incorrect;
@@ -358,6 +365,6 @@ namespace GGPort {
 		protected InputQueue[]     _input_queues;
 
 		protected RingBuffer<Event> _event_queue;
-		protected UdpMsg.connect_status _local_connect_status;
+		protected UdpMsg.connect_status[] _local_connect_status;
    }
 }

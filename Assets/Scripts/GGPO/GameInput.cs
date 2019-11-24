@@ -8,8 +8,9 @@
 // GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS * 8 must be less than
 // 2^BITVECTOR_NIBBLE_SIZE (see bitvector.h)
 
-namespace GGPort { // NOTE LOH, still need to fix format strings in InputQueue.cs.
-                   // NOTE could just change sig to pass interp'd string as arg and be done rid of fmt string altogether....that sounds nice.....
+using System;
+
+namespace GGPort {
 	public unsafe struct GameInput {
 		public const int GAMEINPUT_MAX_BYTES = 9;
 		public const int GAMEINPUT_MAX_PLAYERS = 2;
@@ -22,28 +23,124 @@ namespace GGPort { // NOTE LOH, still need to fix format strings in InputQueue.c
 		public bool is_null() {
 			return frame == -1;
 		}
-		
-		public void init(int frame, char *bits, int size, int offset);
-		public void init(int frame, char *bits, int size);
+
+		public void init(int iframe, byte[] ibits, int isize, int offset) {
+			if (isize == 0) {
+				throw new ArgumentException();
+			}
+
+			if (isize > GAMEINPUT_MAX_BYTES) {
+				throw new ArgumentException();
+			}
+			
+			frame = iframe;
+			size = isize;
+
+			const int sizeOfBits = GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS;
+			for (int i = 0; i < sizeOfBits; i++) {
+				bits[i] = 0;
+			}
+			
+			if (ibits != null) {
+				int startOffset = offset * isize;
+				for (int i = 0; i < isize; i++) {
+					bits[startOffset + i] = ibits[i];
+				}
+			}
+		}
+
+		public void init(int iframe, byte[] ibits, int isize) {
+			if (isize == 0) {
+				throw new ArgumentException();
+			}
+
+			if (isize > GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS) {
+				throw new ArgumentException();
+			}
+			
+			frame = iframe;
+			size = isize;
+
+			const int sizeOfBits = GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS;
+			for (int i = 0; i < sizeOfBits; i++) {
+				bits[i] = 0;
+			}
+			
+			if (ibits != null) {
+				for (int i = 0; i < isize; i++) {
+					bits[i] = ibits[i];
+				}
+			}
+		}
 
 		public bool value(int i) {
 			return (bits[i/8] & (1 << (i%8))) != 0;
 		}
 
 		public void set(int i) {
-			bits[i/8] |= (1 << (i%8));
+			bits[i/8] |= (byte) (1 << (i%8));
 		}
 
 		public void clear(int i) {
-			bits[i/8] &= ~(1 << (i%8));
+			bits[i/8] &= (byte) ~(1 << (i%8));
 		}
 
 		public void erase() {
-			memset(bits, 0, sizeof(bits));
+			const int sizeOfBits = GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS;
+			for (int i = 0; i < sizeOfBits; i++) {
+				bits[i] = 0;
+			}
 		}
-		
-		public void desc(char *buf, size_t buf_size, bool show_frame = true);
-		public void log(char *prefix, bool show_frame = true);
-		public bool equal(ref GameInput input, bool bitsonly = false);
+
+		public string desc(bool show_frame = true) {
+			if (size == 0) {
+				throw new ArgumentException();
+			}
+			
+			string result = $"({(show_frame ? $"frame:{frame} " : "")}size:{size} ";
+
+			for (int i = 0; i < size * 8; i++) {
+				result += $"{i:00} ";
+			}
+
+			result += ")";
+
+			return result;
+		}
+
+		public void log(string prefix, bool show_frame = true) {
+			LogUtil.Log($"{prefix}{desc(show_frame)}\n");
+		}
+
+		public bool equal(ref GameInput other, bool bitsonly = false) {
+			if (!bitsonly && frame != other.frame) {
+				LogUtil.Log($"frames don't match: {frame}, {other.frame}\n");
+			}
+			
+			if (size != other.size) {
+				LogUtil.Log($"sizes don't match: {size}, {other.size}\n");
+			}
+
+			bool bitsAreEqual = true;
+
+			for (int i = 0; i < size; i++) {
+				if (bits[i] != other.bits[i]) {
+					bitsAreEqual = false;
+					break;
+				}
+			}
+			
+			if (!bitsAreEqual) {
+				LogUtil.Log($"bits don't match\n");
+			}
+
+			if (size == 0 || other.size == 0) {
+				throw new ArgumentException();
+			}
+			
+			return (bitsonly || frame == other.frame) &&
+			       size == other.size &&
+			       bitsAreEqual;
+		}
 	};
 }

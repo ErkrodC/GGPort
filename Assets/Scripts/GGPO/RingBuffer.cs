@@ -16,10 +16,10 @@ namespace GGPort {
 			_size = 0;
 		}
 
-		public T front() {
+		public ref T front() {
 			if (_size == _capacity) { throw new ArgumentOutOfRangeException(); }
 
-			return _elements[_tail];
+			return ref _elements[_tail];
 		}
 
 		public T item(int i) {
