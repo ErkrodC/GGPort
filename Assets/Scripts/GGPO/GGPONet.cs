@@ -53,21 +53,20 @@ namespace GGPort {
 	*
 	*/
 
-	[StructLayout(LayoutKind.Explicit)]
 	public struct GGPOPlayer {
-		[FieldOffset(0)] public int size;
-		[FieldOffset(4)] public GGPOPlayerType type;
-		[FieldOffset(8)] public int player_num;
-		[FieldOffset(12)] public readonly Local local;
-		[FieldOffset(12)] public IPEndPoint remote;
+		public int size;
+		public GGPOPlayerType type;
+		public int player_num;
+		public IPEndPoint remote;
 
 		public int Size() {
-			return
-				sizeof(int)
-				+ sizeof(GGPOPlayerType)
-				+ sizeof(int)
-				+ remote.Address.GetAddressBytes().Length
-				+ sizeof(int);
+			int siz = sizeof(int);
+			siz += sizeof(GGPOPlayerType);
+			siz += sizeof(int);
+			siz += type == GGPOPlayerType.GGPO_PLAYERTYPE_LOCAL ? 0 : remote.Address.GetAddressBytes().Length;
+			siz += sizeof(int);
+
+			return siz;
 		}
 
 		public struct Local { }

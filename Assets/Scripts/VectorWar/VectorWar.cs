@@ -21,8 +21,8 @@ namespace VectorWar {
 		public const int FRAME_DELAY = 2;
 		public const int MAX_PLAYERS = 64;
 
-		public static GameState gs = null;
-		public static NonGameState ngs = null;
+		public static GameState gs = new GameState();
+		public static NonGameState ngs = new NonGameState();
 		public static GGPOSession ggpo = null;
 		public static RendererWrapper renderer = RendererWrapper.instance;
 
@@ -53,11 +53,13 @@ namespace VectorWar {
 				on_event = vw_on_event_callback,
 				log_game_state = vw_log_game_state
 			};
+			
+			
 
 #if SYNC_TEST
 			result = GGPOMain.ggpo_start_synctest(ref ggpo, ref cb, "vectorwar", num_players, sizeof(int), 1);
 #else
-			result = ggpo_start_session(ref ggpo, ref cb, "vectorwar", num_players, sizeof(int), localport);
+			result = ggpo_start_session(out ggpo, ref cb, "vectorwar", num_players, sizeof(int), localport);
 #endif
 
 			// automatically disconnect clients after 3000 ms and start our count-down timer

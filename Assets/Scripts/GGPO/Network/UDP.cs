@@ -93,7 +93,7 @@ namespace GGPort {
 		public static Socket CreateSocket(ushort bind_port, int retries) {
 			Socket s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
 			s.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, 1);
-			s.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.DontLinger, 1);
+			//s.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.DontLinger, true); // TODO why doesn't this work?
 
 			// non-blocking...
 			s.Blocking = false;

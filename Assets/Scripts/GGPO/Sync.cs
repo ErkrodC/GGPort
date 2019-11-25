@@ -320,6 +320,9 @@ namespace GGPort {
 
 		protected bool CreateQueues(ref Config config) {
 			_input_queues = new InputQueue[_config.num_players];
+			for (int i = 0; i < _input_queues.Length; i++) {
+				_input_queues[i] = new InputQueue();
+			}
 
 			for (int i = 0; i < _config.num_players; i++) {
 				_input_queues[i].Init(i, _config.input_size);

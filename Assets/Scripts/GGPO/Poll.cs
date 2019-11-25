@@ -24,14 +24,18 @@ namespace GGPort {
 		protected EventWaitHandle[] _handles = new EventWaitHandle[MAX_POLLABLE_HANDLES]; // TODO better as a list? and using .Count over _handle_count
 		protected PollSinkCb[] _handle_sinks = new PollSinkCb[MAX_POLLABLE_HANDLES];
 
-		protected StaticBuffer<PollSinkCb/*, 16*/> _msg_sinks;
-		protected StaticBuffer<PollSinkCb/*, 16*/> _loop_sinks;
-		protected StaticBuffer<PollPeriodicSinkCb/*, 16*/> _periodic_sinks;
+		protected StaticBuffer<PollSinkCb> _msg_sinks;
+		protected StaticBuffer<PollSinkCb> _loop_sinks;
+		protected StaticBuffer<PollPeriodicSinkCb> _periodic_sinks;
 
 		public Poll() {
 			_handle_count = 0;
 			_start_time = 0;
 			_handles[_handle_count++] = new EventWaitHandle(false, EventResetMode.ManualReset);
+			
+			_msg_sinks = new StaticBuffer<PollSinkCb>(16);
+			_loop_sinks = new StaticBuffer<PollSinkCb>(16);
+			_periodic_sinks = new StaticBuffer<PollPeriodicSinkCb>(16);
 		}
 
 		public void RegisterHandle(ref IPollSink sink, ref EventWaitHandle h, object cookie = null) {
@@ -54,7 +58,6 @@ namespace GGPort {
 
 		public void RegisterLoop(IPollSink sink, object cookie = null) {
 			_loop_sinks.push_back(new PollSinkCb(sink, cookie));
-
 		}
 
 		public void Run() {

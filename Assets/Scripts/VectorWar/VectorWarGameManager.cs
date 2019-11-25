@@ -86,11 +86,12 @@ namespace VectorWar {
 				GGPOPlayer[] players = new GGPOPlayer[GGPort.Globals.GGPO_MAX_SPECTATORS + GGPort.Globals.GGPO_MAX_PLAYERS];
 
 				int i;
-				for (i = 0; i < numPlayers; i++) {
+				for (i = 0; i < numPlayers - 1; i++) {
 					players[i].size = players[i].Size(); // TODO for what is size used?
 					players[i].player_num = i + 1;
 
-					PlayerConf playerConf = playerConfs[remotePlayerIndex++];
+					PlayerConf playerConf = playerConfs[remotePlayerIndex];
+					remotePlayerIndex++;
 					if (playerConf.IsLocal()) {
 						players[i].type = GGPOPlayerType.GGPO_PLAYERTYPE_LOCAL;
 						continue;

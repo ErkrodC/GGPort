@@ -19,7 +19,9 @@ namespace VectorWar {
 		public int _framenumber;
 		public Rect _bounds;
 		public int _num_ships;
-		public Ship[] _ships = new Ship[MAX_SHIPS];
+		public Ship[] _ships = new Ship[MAX_SHIPS]; // TODO ecgh
+		
+		public GameState() { }
 
 		public GameState(byte[] buffer) {
 			Deserialize(buffer);
@@ -41,6 +43,11 @@ namespace VectorWar {
 
 			_framenumber = 0;
 			_num_ships = num_players;
+
+			for (int j = 0; j < _ships.Length; j++) { // TODO ecgh
+				_ships[j] = new Ship();
+			}
+			
 			for (i = 0; i < _num_ships; i++) {
 				int heading = i * 360 / num_players;
 				double cost, sint, theta;

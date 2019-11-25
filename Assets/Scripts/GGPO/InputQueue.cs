@@ -35,14 +35,11 @@ namespace GGPort {
 			* no virtual methods, no contained classes, etc.).
 			*/
 
-			int size = sizeof(GameInput) * INPUT_QUEUE_LENGTH;
-			for (int i = 0; i < size; i++) {
-				fixed (GameInput* inputs = _inputs) {
-					byte* ptr = (byte*) inputs;
-					ptr[i] = 0;
-				}
+			_inputs = new GameInput[INPUT_QUEUE_LENGTH];
+			for (int i = 0; i < _inputs.Length; i++) {
+				_inputs[i] = default;
 			}
-			
+
 			for (int j = 0; j < INPUT_QUEUE_LENGTH; j++) {
 				_inputs[j].size = input_size;
 			}
@@ -56,9 +53,9 @@ namespace GGPort {
 		public int GetFirstIncorrectFrame() {
 			return _first_incorrect_frame;
 		}
-		
+
 		public int GetLength() { return _length; }
-		
+
 		public void SetFrameDelay(int delay) { _frame_delay = delay; }
 
 		public void ResetPrediction(int frame) {
@@ -86,13 +83,15 @@ namespace GGPort {
 				frame = Math.Min(frame, _last_frame_requested);
 			}
 
-			Log($"discarding confirmed frames up to {frame} (last_added:{_last_added_frame} length:{_length} [head:{_head} tail:{_tail}]).\n");
-			
+			Log(
+				$"discarding confirmed frames up to {frame} (last_added:{_last_added_frame} length:{_length} [head:{_head} tail:{_tail}]).\n"
+			);
+
 			if (frame >= _last_added_frame) {
 				_tail = _head;
 			} else {
 				int offset = frame - _inputs[_tail].frame + 1;
-	  
+
 				Log($"difference of {offset} frames.\n");
 				if (!(offset >= 0)) {
 					throw new ArgumentException();
@@ -109,12 +108,13 @@ namespace GGPort {
 			if (_first_incorrect_frame != GameInput.NullFrame && requested_frame >= _first_incorrect_frame) {
 				throw new ArgumentException();
 			}
-			
-			int offset = requested_frame % INPUT_QUEUE_LENGTH; 
+
+			int offset = requested_frame % INPUT_QUEUE_LENGTH;
 			if (_inputs[offset].frame != requested_frame) {
 				input = default;
 				return false;
 			}
+
 			input = _inputs[offset];
 			return true;
 		}
@@ -147,14 +147,14 @@ namespace GGPort {
 				* return it.
 				*/
 				int offset = requested_frame - _inputs[_tail].frame;
-				
+
 				if (offset < _length) {
 					offset = (offset + _tail) % INPUT_QUEUE_LENGTH;
-					
+
 					if (_inputs[offset].frame != requested_frame) {
 						throw new ArgumentException();
 					}
-					
+
 					input = _inputs[offset];
 					Log($"returning confirmed frame number {input.frame}.\n");
 					return true;
@@ -172,7 +172,9 @@ namespace GGPort {
 					Log("basing new prediction frame from nothing, since we have no frames yet.\n");
 					_prediction.erase();
 				} else {
-					Log($"basing new prediction frame from previously added frame (queue entry:{PREVIOUS_FRAME(_head)}, frame:{_inputs[PREVIOUS_FRAME(_head)].frame}).\n");
+					Log(
+						$"basing new prediction frame from previously added frame (queue entry:{PREVIOUS_FRAME(_head)}, frame:{_inputs[PREVIOUS_FRAME(_head)].frame}).\n"
+					);
 					_prediction = _inputs[PREVIOUS_FRAME(_head)];
 				}
 
@@ -180,7 +182,7 @@ namespace GGPort {
 			}
 
 			if (_prediction.frame < 0) {
-			   throw new ArgumentException();
+				throw new ArgumentException();
 			}
 
 			/*
@@ -207,6 +209,7 @@ namespace GGPort {
 			if (_last_user_added_frame != GameInput.NullFrame && input.frame != _last_user_added_frame + 1) {
 				throw new ArgumentException();
 			}
+
 			_last_user_added_frame = input.frame;
 
 			/*
@@ -217,7 +220,7 @@ namespace GGPort {
 			if (new_frame != GameInput.NullFrame) {
 				AddDelayedInputToQueue(ref input, new_frame);
 			}
-   
+
 			/*
 			* Update the frame number for the input.  This will also set the
 			* frame to GameInput::NullFrame for frames that get dropped (by
@@ -251,7 +254,7 @@ namespace GGPort {
 				* left.
 				*/
 				Log($"Adding padding frame {expected_frame} to account for change in frame delay.\n");
-				
+
 				// NOTE in c++, this was creating a reference to position in array, not declaring a new GameInput var, so pry not gonna work
 				GameInput last_frame = _inputs[PREVIOUS_FRAME(_head)];
 				AddDelayedInputToQueue(ref last_frame, expected_frame);
@@ -261,10 +264,10 @@ namespace GGPort {
 			if (frame != 0 && frame != _inputs[PREVIOUS_FRAME(_head)].frame + 1) {
 				throw new ArgumentException();
 			}
-			
+
 			return frame;
 		}
-		
+
 		protected void AddDelayedInputToQueue(ref GameInput input, int frame_number) {
 			Log($"adding delayed input frame number {frame_number} to queue.\n");
 
@@ -282,7 +285,7 @@ namespace GGPort {
 
 			/*
 			* Add the frame to the back of the queue
-			*/ 
+			*/
 			_inputs[_head] = input;
 			_inputs[_head].frame = frame_number;
 			_head = (_head + 1) % INPUT_QUEUE_LENGTH;
@@ -336,20 +339,20 @@ namespace GGPort {
 				: offset - 1;
 		}
 
-		protected int                  _id;
-		protected int                  _head;
-		protected int                  _tail;
-		protected int                  _length;
-		protected bool                 _first_frame;
-		
-		protected int                  _last_user_added_frame;
-		protected int                  _last_added_frame;
-		protected int                  _first_incorrect_frame;
-		protected int                  _last_frame_requested;
-		
-		protected int                  _frame_delay;
+		protected int _id;
+		protected int _head;
+		protected int _tail;
+		protected int _length;
+		protected bool _first_frame;
 
-		protected GameInput[]            _inputs;
-		protected GameInput            _prediction;
+		protected int _last_user_added_frame;
+		protected int _last_added_frame;
+		protected int _first_incorrect_frame;
+		protected int _last_frame_requested;
+
+		protected int _frame_delay;
+
+		protected GameInput[] _inputs;
+		protected GameInput _prediction;
 	}
 }

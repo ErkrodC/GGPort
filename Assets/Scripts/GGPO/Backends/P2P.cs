@@ -62,12 +62,18 @@ namespace GGPort {
 			/*
 			 * Initialize the UDP port
 			 */
+			_udp = new Udp();
+			_poll = new Poll();
 			_udp.Init(localport, ref _poll, this);
 
 			_endpoints = new UdpProtocol[_num_players];
-			int sizeOfLocalConnStatus = UdpMsg.UDP_MSG_MAX_PLAYERS * sizeof(UdpMsg.connect_status);
-			for (int i = 0; i < sizeOfLocalConnStatus; i++) {
-				Buffer.SetByte(_local_connect_status, i, 0);
+			for (int i = 0; i < _num_players; i++) {
+				_endpoints[i] = new UdpProtocol();
+			}
+			
+
+			for (int i = 0; i < _local_connect_status.Length; i++) {
+				_local_connect_status[i] = default;
 			}
 			
 			for (int i = 0; i < _local_connect_status.Length; i++) {
