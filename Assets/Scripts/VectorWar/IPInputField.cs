@@ -1,10 +1,15 @@
 ﻿using System.Net;
+using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
-public class IPAddressText : MonoBehaviour {
-	[SerializeField] private Text fullAddressText;
-	
+[RequireComponent(typeof(TMP_InputField))]
+public class IPInputField : MonoBehaviour {
+	private TMP_InputField fullAddressText;
+
+	private void Awake() {
+		fullAddressText = GetComponent<TMP_InputField>();
+	}
+
 	public IPEndPoint GetIPEndPoint() {
 		string[] ipAddressAndPortStrings = fullAddressText.text.Split(':');
 		string ipAddressString = ipAddressAndPortStrings[0];
