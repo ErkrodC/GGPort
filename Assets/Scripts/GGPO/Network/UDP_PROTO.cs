@@ -212,12 +212,12 @@ namespace GGPort {
 		}
 
 		// TODO last param is list?
-		public void Init(ref Udp udp, ref Poll poll, int queue, IPAddress ip, ushort port, UdpMsg.connect_status[] status) {
+		public void Init(ref Udp udp, ref Poll poll, int queue, IPEndPoint endPoint, UdpMsg.connect_status[] status) {
 			_udp = udp;
 			_queue = queue;
 			_local_connect_status = status;
 
-			_peer_addr = new IPEndPoint(ip, port);
+			_peer_addr = endPoint;
 
 			do {
 				_magic_number = (ushort) new Random().Next(0, ushort.MaxValue); // TODO this class should hold a Random type var
@@ -513,8 +513,10 @@ namespace GGPort {
 					byte[] buf = new byte[packetSize];
 					
 					BinaryFormatter b = new BinaryFormatter();
-					using MemoryStream ms = new MemoryStream(buf); // TODO optimize/refactor
-					b.Serialize(ms, entry.msg);
+					using (MemoryStream ms = new MemoryStream(buf)) {
+						b.Serialize(ms, entry.msg);
+					} // TODO optimize/refactor
+					
 					
 					_udp.SendTo(buf, packetSize, 0, entry.dest_addr);
 
@@ -530,8 +532,9 @@ namespace GGPort {
 				byte[] buf = new byte[packetSize];
 					
 				BinaryFormatter b = new BinaryFormatter();
-				using MemoryStream ms = new MemoryStream(buf); // TODO optimize/refactor
-				b.Serialize(ms, (UdpMsg) _oo_packet.msg); // TODO does this needs to cast from <UdpMsg?> to <UdpMsg> ???
+				using (MemoryStream ms = new MemoryStream(buf)) {
+					b.Serialize(ms, (UdpMsg) _oo_packet.msg); // TODO does this needs to cast from <UdpMsg?> to <UdpMsg> ???
+				} // TODO optimize/refactor
 				
 				_udp.SendTo(buf, packetSize, 0, _oo_packet.dest_addr);
 
@@ -621,7 +624,7 @@ namespace GGPort {
 
 		protected bool OnInvalid(ref UdpMsg msg, int len) {
 			throw new ArgumentException("Invalid msg in UdpProtocol");
-			return false;
+			//return false;
 		}
 
 		protected bool OnSyncRequest(ref UdpMsg msg, int len) {

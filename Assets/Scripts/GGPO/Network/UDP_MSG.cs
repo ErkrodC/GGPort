@@ -8,10 +8,8 @@
 using System;
 using System.Runtime.InteropServices;
 
-#pragma pack(push, 1)
-
 namespace GGPort {
-	[StructLayout(LayoutKind.Explicit)]
+	[StructLayout(LayoutKind.Explicit, Pack = 1)]
 	public struct UdpMsg {
 		public const ushort MAX_COMPRESSED_BITS = 4096;
 		public const byte UDP_MSG_MAX_PLAYERS = 4;
@@ -76,12 +74,12 @@ namespace GGPort {
 		}
 		
 		// TODO remove unsafe
-		public readonly unsafe int PacketSize() {
+		public unsafe int PacketSize() {
 			return sizeof(HDR) + PayloadSize();
 		}
 
 		// TODO remove unsafe
-		public readonly unsafe int PayloadSize() {
+		public unsafe int PayloadSize() {
 			switch (hdr.type) {
 				case MsgType.SyncRequest:   return sizeof(SyncRequest);
 				case MsgType.SyncReply:     return sizeof(SyncReply);
@@ -128,5 +126,3 @@ namespace GGPort {
 		}
 	};
 }
-
-#pragma pack(pop)

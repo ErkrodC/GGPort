@@ -72,11 +72,11 @@ namespace GGPort {
 
 					if (recv_addr is IPEndPoint recvAddrIP) {
 						Log($"recvfrom returned (len:{len}  from:{recvAddrIP.Address}:{recvAddrIP.Port}).\n");
-						using MemoryStream ms = new MemoryStream(recv_buf);
 						IFormatter br = new BinaryFormatter();
-						UdpMsg msg = (UdpMsg) br.Deserialize(ms);
-					
-						_callbacks.OnMsg(recvAddrIP, ref msg, len);
+						using (MemoryStream ms = new MemoryStream(recv_buf)) {
+							UdpMsg msg = (UdpMsg) br.Deserialize(ms);
+							_callbacks.OnMsg(recvAddrIP, ref msg, len);
+						} // TODO optimize refactor
 					} else {
 						throw new ArgumentException("Was expecting IPEndPoint. You added this check..."); // TODO remove?
 					}
@@ -105,7 +105,7 @@ namespace GGPort {
 					return s;
 				} catch (Exception e) {
 					Console.WriteLine(e);
-					break;
+					//break;
 				}
 			}
 			

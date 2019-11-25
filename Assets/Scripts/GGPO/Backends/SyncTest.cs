@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.Serialization.Formatters.Binary;
 
 namespace GGPort {
 	public class SyncTestBackend : GGPOSession {
@@ -52,29 +53,36 @@ namespace GGPort {
 			return GGPOErrorCode.GGPO_OK;
 		}
 
-		public override GGPOErrorCode AddPlayer(ref GGPOPlayer player, ref GGPOPlayerHandle handle) {
+		public override GGPOErrorCode AddPlayer(ref GGPOPlayer player, out GGPOPlayerHandle handle) {
 			if (player.player_num < 1 || player.player_num > _num_players) {
+				handle = new GGPOPlayerHandle(-1);
 				return GGPOErrorCode.GGPO_ERRORCODE_PLAYER_OUT_OF_RANGE;
 			}
+			
 			handle = new GGPOPlayerHandle(player.player_num - 1);
 			return GGPOErrorCode.GGPO_OK;
 		}
 
-		public override unsafe GGPOErrorCode AddLocalInput(GGPOPlayerHandle player, object[] values, int size) {
+		public override unsafe GGPOErrorCode AddLocalInput(GGPOPlayerHandle player, object value, int size) {
 			if (!_running) {
 				return GGPOErrorCode.GGPO_ERRORCODE_NOT_SYNCHRONIZED;
 			}
 
 			int index = player.handleValue;
 			
+			byte[] valByteArr = new byte[size];
+			BinaryFormatter bf = new BinaryFormatter();
+			using (MemoryStream ms = new MemoryStream(valByteArr)) {
+				bf.Serialize(ms, value);
+			} // TODO refactor/optimize
 			
 			for (int i = 0; i < size; i++) {
-				_current_input.bits[index * size + i] |= Buffer.GetByte(values, i);
+				_current_input.bits[index * size + i] |= valByteArr[i];
 			}
 			return GGPOErrorCode.GGPO_OK;
 		}
 
-		public override unsafe GGPOErrorCode SyncInput(ref object[] values, int size, ref int? disconnect_flags) {
+		public override unsafe GGPOErrorCode SyncInput(ref Array values, int size, ref int? disconnect_flags) {
 			BeginLog(false);
 			
 			if (_rollingback) {
@@ -97,7 +105,7 @@ namespace GGPort {
 			return GGPOErrorCode.GGPO_OK;
 		}
 
-		public virtual GGPOErrorCode IncrementFrame() {
+		public override GGPOErrorCode IncrementFrame() {
 			_sync.IncrementFrame();
 			_current_input.erase();
    

@@ -1,5 +1,7 @@
 ﻿using System;
+using System.IO;
 using System.Net;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Threading;
 
 namespace GGPort {
@@ -120,7 +122,7 @@ namespace GGPort {
 								   size = _input_size * _num_players
 							   };
 							   
-							   _sync.GetConfirmedInputs(ref input.bits, _input_size * _num_players, _next_spectator_frame);
+							   _sync.GetConfirmedInputs(input.bits, _input_size * _num_players, _next_spectator_frame);
 							   for (int i = 0; i < _num_spectators; i++) {
 								   _spectators[i].SendInput(ref input);
 							   }
@@ -161,9 +163,10 @@ namespace GGPort {
 			return GGPOErrorCode.GGPO_OK;
 		}
 
-		public override GGPOErrorCode AddPlayer(ref GGPOPlayer player, ref GGPOPlayerHandle handle) {
+		public override GGPOErrorCode AddPlayer(ref GGPOPlayer player, out GGPOPlayerHandle handle) {
+			handle = new GGPOPlayerHandle(-1);
 			if (player.type == GGPOPlayerType.GGPO_PLAYERTYPE_SPECTATOR) {
-				return AddSpectator(player.remote.ip_address, player.remote.port);
+				return AddSpectator(player.remote);
 			}
 
 			int queue = player.player_num - 1;
@@ -174,13 +177,13 @@ namespace GGPort {
 			handle = QueueToPlayerHandle(queue);
 
 			if (player.type == GGPOPlayerType.GGPO_PLAYERTYPE_REMOTE) {
-				AddRemotePlayer(player.remote.ip_address, player.remote.port, queue);
+				AddRemotePlayer(player.remote, queue);
 			}
 			
 			return GGPOErrorCode.GGPO_OK;
 		}
 
-		public override GGPOErrorCode AddLocalInput(GGPOPlayerHandle player, object[] values, int size) {
+		public override GGPOErrorCode AddLocalInput(GGPOPlayerHandle player, object value, int size) {
 			GameInput input = new GameInput();
 
 			if (_sync.InRollback()) {
@@ -195,10 +198,11 @@ namespace GGPort {
 				return result;
 			}
 
+			BinaryFormatter bf = new BinaryFormatter();
 			byte[] valByteArr = new byte[size];
-			for (int i = 0; i < size; i++) {
-				valByteArr[i] = Buffer.GetByte(values, i);
-			}
+			using (MemoryStream ms = new MemoryStream(valByteArr)) {
+				bf.Serialize(ms, value);
+			} // TODO optimize refactor
 			
 			input.init(-1, valByteArr, size);
 
@@ -225,7 +229,7 @@ namespace GGPort {
 			return GGPOErrorCode.GGPO_OK;
 		}
 
-		public override GGPOErrorCode SyncInput(ref object[] values, int size, ref int? disconnect_flags) {
+		public override GGPOErrorCode SyncInput(ref Array values, int size, ref int? disconnect_flags) {
 			// Wait until we've started to return inputs.
 			if (_synchronizing) {
 				return GGPOErrorCode.GGPO_ERRORCODE_NOT_SYNCHRONIZED;
@@ -509,17 +513,17 @@ namespace GGPort {
 			return total_min_confirmed;
 		}
 
-		protected void AddRemotePlayer(IPAddress remoteAddress, ushort reportPort, int queue) {
+		protected void AddRemotePlayer(IPEndPoint remoteEndPoint, int queue) {
 			// Start the state machine (xxx: no)
 			_synchronizing = true;
    
-			_endpoints[queue].Init(ref _udp, ref _poll, queue, remoteAddress, reportPort, _local_connect_status);
+			_endpoints[queue].Init(ref _udp, ref _poll, queue, remoteEndPoint, _local_connect_status);
 			_endpoints[queue].SetDisconnectTimeout(_disconnect_timeout);
 			_endpoints[queue].SetDisconnectNotifyStart(_disconnect_notify_start);
 			_endpoints[queue].Synchronize();
 		}
 
-		protected GGPOErrorCode AddSpectator(IPAddress remoteIP, ushort reportPort) {
+		protected GGPOErrorCode AddSpectator(IPEndPoint remoteEndPoint) {
 			if (_num_spectators == Globals.GGPO_MAX_SPECTATORS) {
 				return GGPOErrorCode.GGPO_ERRORCODE_TOO_MANY_SPECTATORS;
 			}
@@ -530,7 +534,7 @@ namespace GGPort {
 			}
 			int queue = _num_spectators++;
 
-			_spectators[queue].Init(ref _udp, ref _poll, queue + 1000, remoteIP, reportPort, _local_connect_status);
+			_spectators[queue].Init(ref _udp, ref _poll, queue + 1000, remoteEndPoint, _local_connect_status);
 			_spectators[queue].SetDisconnectTimeout(_disconnect_timeout);
 			_spectators[queue].SetDisconnectNotifyStart(_disconnect_notify_start);
 			_spectators[queue].Synchronize();

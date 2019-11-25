@@ -1,8 +1,9 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Net;
 
 namespace GGPort {
-	public static class GGPOMain {
+	public static class GGPortMain {
 		public static Random Random;
 		
 		public static bool Main() {
@@ -50,8 +51,9 @@ namespace GGPort {
 		* handle - An out parameter to a handle used to identify this player in the future.
 		* (e.g. in the on_event callbacks).
 		*/
-		public static GGPOErrorCode ggpo_add_player(ref GGPOSession ggpo, ref GGPOPlayer player, ref GGPOPlayerHandle handle) {
-			return ggpo?.AddPlayer(ref player, ref handle) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
+		public static GGPOErrorCode ggpo_add_player(ref GGPOSession ggpo, ref GGPOPlayer player, out GGPOPlayerHandle handle) {
+			handle = new GGPOPlayerHandle(-1);
+			return ggpo?.AddPlayer(ref player, out handle) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
 		}
 
 		/*
@@ -121,8 +123,7 @@ namespace GGPort {
 			int num_players,
 			int input_size,
 			ushort local_port,
-			byte[] host_ip,
-			ushort host_port
+			IPEndPoint hostEndPoint
 		) {
 			return GGPOErrorCode.GGPO_OK;
 		}
@@ -186,10 +187,10 @@ namespace GGPort {
 		public static GGPOErrorCode ggpo_add_local_input(
 			ref GGPOSession ggpo,
 			GGPOPlayerHandle player,
-			object[] values,
+			object value,
 			int size
 		) {
-			return ggpo?.AddLocalInput(player, values, size) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
+			return ggpo?.AddLocalInput(player, value, size) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
 		}
 
 		/*
@@ -211,7 +212,7 @@ namespace GGPort {
 		*/
 		public static GGPOErrorCode ggpo_synchronize_input(
 			ref GGPOSession ggpo,
-			object[] values,
+			Array values,
 			int size,
 			int? disconnect_flags
 		) {

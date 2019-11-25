@@ -105,7 +105,7 @@ namespace GGPort {
 			_input_queues[queue].AddInput(ref input);
 		}
 
-		public unsafe int GetConfirmedInputs(ref byte* values, int size, int frame) {
+		public unsafe int GetConfirmedInputs(byte* values, int size, int frame) {
 			int disconnect_flags = 0;
 
 			if (size < _config.num_players * _config.input_size) {
@@ -133,14 +133,14 @@ namespace GGPort {
 			return disconnect_flags;
 		}
 
-		public unsafe int SynchronizeInputs(ref object[] values, int size) {
+		public unsafe int SynchronizeInputs(ref Array values, int size) {
 			int disconnect_flags = 0;
 			//char *output = (char *)values;
 
 			if (size < _config.num_players * _config.input_size) {
 				throw new ArgumentException();
 			}
-
+			
 			for (int i = 0; i < size; i++) {
 				Buffer.SetByte(values, i, 0);
 			}
@@ -271,7 +271,7 @@ namespace GGPort {
 				throw new ArgumentException();
 			}
 			
-			_callbacks.load_game_state(state.buf, state.cbuf);
+			_callbacks.load_game_state(state.buf);
 
 			// Reset framecount and the head of the state ring-buffer to point in
 			// advance of the current frame (as if we had just finished executing it).
