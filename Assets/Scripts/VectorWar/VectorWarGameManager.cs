@@ -5,6 +5,8 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
+#pragma warning disable 0649
+
 namespace VectorWar {
 	public class VectorWarGameManager : MonoBehaviour {
 		[SerializeField] private TMP_Text titleText;

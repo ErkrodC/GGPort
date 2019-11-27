@@ -13,7 +13,7 @@ using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
 
 namespace GGPort {
-	public class Udp : IPollSink {
+	public class UDP : IPollSink {
 		public const int MAX_UDP_ENDPOINTS = 16;
 		public const int MAX_UDP_PACKET_SIZE = 4096;
 		
@@ -28,12 +28,12 @@ namespace GGPort {
 			
 		}
 
-		public Udp() {
+		public UDP() {
 			_socket = null;
 			_callbacks = null;
 		}
 
-		~Udp() {
+		~UDP() {
 			if (_socket != null) {
 				_socket.Close();
 				_socket = null;
@@ -74,7 +74,7 @@ namespace GGPort {
 						Log($"recvfrom returned (len:{len}  from:{recvAddrIP.Address}:{recvAddrIP.Port}).\n");
 						IFormatter br = new BinaryFormatter();
 						using (MemoryStream ms = new MemoryStream(recv_buf)) {
-							UdpMsg msg = (UdpMsg) br.Deserialize(ms);
+							UDPMessage msg = (UDPMessage) br.Deserialize(ms);
 							_callbacks.OnMsg(recvAddrIP, ref msg, len);
 						} // TODO optimize refactor
 					} else {
@@ -126,7 +126,7 @@ namespace GGPort {
 		}
 
 		public interface Callbacks {
-			void OnMsg(IPEndPoint from, ref UdpMsg msg, int len);
+			void OnMsg(IPEndPoint from, ref UDPMessage msg, int len);
 		}
 	}
 }

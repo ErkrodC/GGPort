@@ -42,7 +42,7 @@ namespace GGPort {
 			}
 		}
 
-		public Sync(ref UdpMsg.connect_status[] connect_status) {
+		public Sync(ref UDPMessage.connect_status[] connect_status) {
 			_local_connect_status = connect_status;
 			_input_queues = null;
 			_framecount = 0;
@@ -368,6 +368,6 @@ namespace GGPort {
 		protected InputQueue[]     _input_queues;
 
 		protected RingBuffer<Event> _event_queue;
-		protected UdpMsg.connect_status[] _local_connect_status;
+		protected UDPMessage.connect_status[] _local_connect_status;
    }
 }

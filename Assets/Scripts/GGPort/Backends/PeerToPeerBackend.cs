@@ -5,7 +5,7 @@ using System.Runtime.Serialization.Formatters.Binary;
 using System.Threading;
 
 namespace GGPort {
-	public class Peer2PeerBackend : GGPOSession, IPollSink, Udp.Callbacks {
+	public class PeerToPeerBackend : GGPOSession, IPollSink, UDP.Callbacks {
 		const int RECOMMENDATION_INTERVAL = 240;
 		const int DEFAULT_DISCONNECT_TIMEOUT = 5000;
 		const int DEFAULT_DISCONNECT_NOTIFY_START = 750;
@@ -13,9 +13,9 @@ namespace GGPort {
 		protected GGPOSessionCallbacks _callbacks;
 		protected Poll _poll;
 		protected Sync _sync;
-		protected Udp _udp;
-		protected UdpProtocol[] _endpoints;
-		protected UdpProtocol[] _spectators = new UdpProtocol[Globals.GGPO_MAX_SPECTATORS];
+		protected UDP _udp;
+		protected UDPProtocol[] _endpoints;
+		protected UDPProtocol[] _spectators = new UDPProtocol[Globals.GGPO_MAX_SPECTATORS];
 		protected int _num_spectators;
 		protected int _input_size;
 
@@ -27,17 +27,17 @@ namespace GGPort {
 		protected uint _disconnect_timeout;
 		protected uint _disconnect_notify_start;
 
-		protected UdpMsg.connect_status[] _local_connect_status = new UdpMsg.connect_status[UdpMsg.UDP_MSG_MAX_PLAYERS];
+		protected UDPMessage.connect_status[] _local_connect_status = new UDPMessage.connect_status[UDPMessage.UDP_MSG_MAX_PLAYERS];
 
-		public unsafe Peer2PeerBackend(
+		public PeerToPeerBackend(
 			ref GGPOSessionCallbacks cb,
-			string gamename,
-			ushort localport,
-			int num_players,
-			int input_size
+			string gameName,
+			ushort localPort,
+			int numPlayers,
+			int inputSize
 		) {
-			_num_players = num_players;
-			_input_size = input_size;
+			_num_players = numPlayers;
+			_input_size = inputSize;
 			_sync = new Sync(ref _local_connect_status);
 			_disconnect_timeout = DEFAULT_DISCONNECT_TIMEOUT;
 			_disconnect_notify_start = DEFAULT_DISCONNECT_NOTIFY_START;
@@ -47,30 +47,25 @@ namespace GGPort {
 			_synchronizing = true;
 			_next_recommended_sleep = 0;
 
-			/*
-			* Initialize the synchronziation layer
-			*/
+			// Initialize the synchronization layer
 			Sync.Config config = new Sync.Config(
 				_callbacks,
 				Sync.MAX_PREDICTION_FRAMES,
-				num_players,
-				input_size
+				numPlayers,
+				inputSize
 			);
 			
 			_sync.Init(ref config);
 
-			/*
-			 * Initialize the UDP port
-			 */
-			_udp = new Udp();
+			// Initialize the UDP port
+			_udp = new UDP();
 			_poll = new Poll();
-			_udp.Init(localport, ref _poll, this);
+			_udp.Init(localPort, ref _poll, this);
 
-			_endpoints = new UdpProtocol[_num_players];
+			_endpoints = new UDPProtocol[_num_players];
 			for (int i = 0; i < _num_players; i++) {
-				_endpoints[i] = new UdpProtocol();
+				_endpoints[i] = new UDPProtocol();
 			}
-			
 
 			for (int i = 0; i < _local_connect_status.Length; i++) {
 				_local_connect_status[i] = default;
@@ -80,13 +75,11 @@ namespace GGPort {
 				_local_connect_status[i].last_frame = -1;
 			}
 
-			/*
-			* Preload the ROM
-			*/
-			_callbacks.begin_game(gamename);
+			// Preload the ROM
+			_callbacks.begin_game(gameName);
 		}
 
-		~Peer2PeerBackend() {
+		~PeerToPeerBackend() {
 			_endpoints = null;
 		}
 
@@ -336,7 +329,7 @@ namespace GGPort {
 			return GGPOErrorCode.GGPO_OK;
 		}
 
-		public virtual void OnMsg(IPEndPoint from, ref UdpMsg msg, int len) {
+		public virtual void OnMsg(IPEndPoint from, ref UDPMessage msg, int len) {
 			for (int i = 0; i < _num_players; i++) {
 				if (_endpoints[i].HandlesMsg(ref from, ref msg)) {
 					_endpoints[i].OnMsg(ref msg, len);
@@ -404,13 +397,13 @@ namespace GGPort {
 
 		protected void PollUdpProtocolEvents() {
 			for (int i = 0; i < _num_players; i++) {
-				while (_endpoints[i].GetEvent(out UdpProtocol.Event evt)) {
+				while (_endpoints[i].GetEvent(out UDPProtocol.Event evt)) {
 					OnUdpProtocolPeerEvent(ref evt, i);
 				}
 			}
 			
 			for (int i = 0; i < _num_spectators; i++) {
-				while (_spectators[i].GetEvent(out UdpProtocol.Event evt)) {
+				while (_spectators[i].GetEvent(out UDPProtocol.Event evt)) {
 					OnUdpProtocolSpectatorEvent(ref evt, i);
 				}
 			}
@@ -550,9 +543,9 @@ namespace GGPort {
 		
 		protected virtual void OnSyncEvent(ref Sync.Event e) { }
 
-		protected virtual void OnUdpProtocolEvent(ref UdpProtocol.Event evt, GGPOPlayerHandle handle) {
+		protected virtual void OnUdpProtocolEvent(ref UDPProtocol.Event evt, GGPOPlayerHandle handle) {
 			switch (evt.type) {
-				case UdpProtocol.Event.Type.Connected: {
+				case UDPProtocol.Event.Type.Connected: {
 					GGPOEvent info = new GGPOEvent {
 						code = GGPOEventCode.GGPO_EVENTCODE_CONNECTED_TO_PEER,
 						connected = {
@@ -563,7 +556,7 @@ namespace GGPort {
 					_callbacks.on_event(ref info);
 					break;
 				}
-				case UdpProtocol.Event.Type.Synchronizing: {
+				case UDPProtocol.Event.Type.Synchronizing: {
 					GGPOEvent info = new GGPOEvent {
 						code = GGPOEventCode.GGPO_EVENTCODE_SYNCHRONIZING_WITH_PEER,
 						synchronizing = {
@@ -574,7 +567,7 @@ namespace GGPort {
 					_callbacks.on_event(ref info);
 					break;
 				}
-				case UdpProtocol.Event.Type.Synchronzied: {
+				case UDPProtocol.Event.Type.Synchronized: {
 					GGPOEvent info = new GGPOEvent {
 						code = GGPOEventCode.GGPO_EVENTCODE_SYNCHRONIZED_WITH_PEER,
 						synchronized = {
@@ -588,7 +581,7 @@ namespace GGPort {
 					break;
 				}
 
-				case UdpProtocol.Event.Type.NetworkInterrupted: {
+				case UDPProtocol.Event.Type.NetworkInterrupted: {
 					GGPOEvent info = new GGPOEvent {
 						code = GGPOEventCode.GGPO_EVENTCODE_CONNECTION_INTERRUPTED,
 						connection_interrupted = {
@@ -600,7 +593,7 @@ namespace GGPort {
 					break;
 				}
 
-				case UdpProtocol.Event.Type.NetworkResumed: {
+				case UDPProtocol.Event.Type.NetworkResumed: {
 					GGPOEvent info = new GGPOEvent {
 						code = GGPOEventCode.GGPO_EVENTCODE_CONNECTION_RESUMED,
 						connection_resumed = {
@@ -614,10 +607,10 @@ namespace GGPort {
 			}
 		}
 
-		protected virtual void OnUdpProtocolPeerEvent(ref UdpProtocol.Event evt, int queue) {
+		protected virtual void OnUdpProtocolPeerEvent(ref UDPProtocol.Event evt, int queue) {
 			OnUdpProtocolEvent(ref evt, QueueToPlayerHandle(queue));
 			switch (evt.type) {
-				case UdpProtocol.Event.Type.Input:
+				case UDPProtocol.Event.Type.Input:
 					if (!_local_connect_status[queue].disconnected) {
 						int current_remote_frame = _local_connect_status[queue].last_frame;
 						int new_remote_frame = evt.input.input.frame;
@@ -633,18 +626,18 @@ namespace GGPort {
 					}
 					break;
 
-				case UdpProtocol.Event.Type.Disconnected:
+				case UDPProtocol.Event.Type.Disconnected:
 					DisconnectPlayer(QueueToPlayerHandle(queue));
 					break;
 			}
 		}
 
-		protected virtual void OnUdpProtocolSpectatorEvent(ref UdpProtocol.Event evt, int queue) {
+		protected virtual void OnUdpProtocolSpectatorEvent(ref UDPProtocol.Event evt, int queue) {
 			GGPOPlayerHandle handle = QueueToSpectatorHandle(queue);
 			OnUdpProtocolEvent(ref evt, handle);
 
 			switch (evt.type) {
-				case UdpProtocol.Event.Type.Disconnected:
+				case UDPProtocol.Event.Type.Disconnected:
 					_spectators[queue].Disconnect();
 
 					GGPOEvent info = new GGPOEvent {

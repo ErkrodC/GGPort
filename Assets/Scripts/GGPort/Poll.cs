@@ -31,7 +31,11 @@ namespace GGPort {
 		public Poll() {
 			_handle_count = 0;
 			_start_time = 0;
-			_handles[_handle_count++] = new EventWaitHandle(false, EventResetMode.ManualReset);
+
+			for (_handle_count = 0; _handle_count < _handles.Length; _handle_count++) {
+				_handles[_handle_count] = new EventWaitHandle(false, EventResetMode.ManualReset);
+			}
+			
 			
 			_msg_sinks = new StaticBuffer<PollSinkCb>(16);
 			_loop_sinks = new StaticBuffer<PollSinkCb>(16);

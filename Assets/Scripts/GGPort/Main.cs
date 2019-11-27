@@ -34,7 +34,7 @@ namespace GGPort {
 		* local_port - The port GGPO should bind to for UDP traffic.
 		*/
 		public static GGPOErrorCode ggpo_start_session(out GGPOSession session, ref GGPOSessionCallbacks cb, string game, int num_players, int input_size, ushort localport) {
-			session = new Peer2PeerBackend(ref cb, game, localport, num_players, input_size);
+			session = new PeerToPeerBackend(ref cb, game, localport, num_players, input_size);
 			return GGPOErrorCode.GGPO_OK;
 		}
 

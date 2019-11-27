@@ -1,12 +1,14 @@
-﻿using UnityEngine;
+﻿using TMPro;
+using UnityEngine;
 using UnityEngine.UI;
 
+#pragma warning disable 0649
+
 namespace VectorWar {
-	
 	// wrapper for unity UI API, basically
 	public class RendererWrapper : MonoBehaviour {
 		public static RendererWrapper instance;
-		[SerializeField] private Text statusText;
+		[SerializeField] private TMP_Text statusText;
 		[SerializeField] private MessageBox messageBox;
 
 		private void Awake() {
