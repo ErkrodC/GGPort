@@ -408,17 +408,12 @@ namespace GGPort {
 					if (entry.dest_addr.Address.Equals(IPAddress.None)) {
 						throw new ArgumentException();
 					}
-
-					int packetSize = entry.msg.PacketSize();
-					byte[] buf = new byte[packetSize];
 					
 					BinaryFormatter b = new BinaryFormatter();
-					using (MemoryStream ms = new MemoryStream(buf)) {
+					using (MemoryStream ms = new MemoryStream(entry.msg.PacketSize())) {
 						b.Serialize(ms, entry.msg);
+						_udp.SendTo(ms.ToArray(), (int) ms.Length, 0, entry.dest_addr);
 					} // TODO optimize/refactor
-					
-					
-					_udp.SendTo(buf, packetSize, 0, entry.dest_addr);
 
 					entry.msg = default;
 				}
@@ -427,16 +422,12 @@ namespace GGPort {
 			}
 			if (_oo_packet.msg != null && _oo_packet.send_time < Platform.GetCurrentTimeMS()) {
 				Log("sending rogue oop!");
-				
-				int packetSize = (int) _oo_packet.msg?.PacketSize(); // TODO ecgh
-				byte[] buf = new byte[packetSize];
 					
 				BinaryFormatter b = new BinaryFormatter();
-				using (MemoryStream ms = new MemoryStream(buf)) {
+				using (MemoryStream ms = new MemoryStream((int) _oo_packet.msg?.PacketSize())) {
 					b.Serialize(ms, (UDPMessage) _oo_packet.msg); // TODO does this needs to cast from <UdpMsg?> to <UdpMsg> ???
+					_udp.SendTo(ms.ToArray(), (int) ms.Length, 0, _oo_packet.dest_addr);
 				} // TODO optimize/refactor
-				
-				_udp.SendTo(buf, packetSize, 0, _oo_packet.dest_addr);
 
 				_oo_packet.msg = null; // TODO does this need to be nullable?
 			}

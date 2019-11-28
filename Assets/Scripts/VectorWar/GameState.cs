@@ -118,8 +118,8 @@ namespace VectorWar {
 							ship.bullets[i].position.x =
 								ship.position.x + (ship.radius * dx); // NOTE possible sources of non-determinism
 							ship.bullets[i].position.y = ship.position.y + (ship.radius * dy);
-							ship.bullets[i].velocity.x = ship.velocity.x + (Bullet.BULLET_SPEED * dx);
-							ship.bullets[i].velocity.y = ship.velocity.y + (Bullet.BULLET_SPEED * dy);
+							ship.bullets[i].velocity.x = ship.deltaVelocity.x + (Bullet.BULLET_SPEED * dx);
+							ship.bullets[i].velocity.y = ship.deltaVelocity.y + (Bullet.BULLET_SPEED * dy);
 							ship.cooldown = Bullet.BULLET_COOLDOWN;
 							break;
 						}
@@ -132,24 +132,24 @@ namespace VectorWar {
 				                    * Math.Cos(MathUtil.degtorad(heading))); // NOTE possible sources of non-determinism
 				float dy = (float) (thrust * Math.Sin(MathUtil.degtorad(heading)));
 
-				ship.velocity.x += dx;
-				ship.velocity.y += dy;
+				ship.deltaVelocity.x += dx;
+				ship.deltaVelocity.y += dy;
 				float mag = (float) Math.Sqrt(
-					ship.velocity.x * ship.velocity.x + ship.velocity.y * ship.velocity.y
+					ship.deltaVelocity.x * ship.deltaVelocity.x + ship.deltaVelocity.y * ship.deltaVelocity.y
 				); // NOTE possible source of non-determinism
 				if (mag > Ship.SHIP_MAX_THRUST) {
-					ship.velocity.x = (ship.velocity.x * Ship.SHIP_MAX_THRUST) / mag;
-					ship.velocity.y = (ship.velocity.y * Ship.SHIP_MAX_THRUST) / mag;
+					ship.deltaVelocity.x = (ship.deltaVelocity.x * Ship.SHIP_MAX_THRUST) / mag;
+					ship.deltaVelocity.y = (ship.deltaVelocity.y * Ship.SHIP_MAX_THRUST) / mag;
 				}
 			}
 
 			GGPortMain.ggpo_log(
 				ref Globals.ggpo,
-				$"new ship velocity: (dx:{ship.velocity.x:F4} dy:{ship.velocity.y:F4}).\n"
+				$"new ship velocity: (dx:{ship.deltaVelocity.x:F4} dy:{ship.deltaVelocity.y:F4}).\n"
 			);
 
-			ship.position.x += ship.velocity.x;
-			ship.position.y += ship.velocity.y;
+			ship.position.x += ship.deltaVelocity.x;
+			ship.position.y += ship.deltaVelocity.y;
 			GGPortMain.ggpo_log(
 				ref Globals.ggpo,
 				$"new ship position: (dx:{ship.position.x:F4} dy:{ship.position.y:F4}).\n"
@@ -157,14 +157,14 @@ namespace VectorWar {
 
 			// TODO this might not work as expected, bouncing of screen bounds
 			if (ship.position.x - ship.radius < _bounds.xMin || ship.position.x + ship.radius > _bounds.xMax) {
-				ship.velocity.x *= -1; // XXX Divergence by multiplicative factor
-				ship.position.x += ship.velocity.x * 2;
+				ship.deltaVelocity.x *= -1; // XXX Divergence by multiplicative factor
+				ship.position.x += ship.deltaVelocity.x * 2;
 			}
 
 			// TODO same
 			if (ship.position.y - ship.radius < _bounds.yMin || ship.position.y + ship.radius > _bounds.yMax) {
-				ship.velocity.y *= -1; // XXX Divergence by multiplicative factor 
-				ship.position.y += ship.velocity.y * 2;
+				ship.deltaVelocity.y *= -1; // XXX Divergence by multiplicative factor 
+				ship.position.y += ship.deltaVelocity.y * 2;
 			}
 
 			// TODO again

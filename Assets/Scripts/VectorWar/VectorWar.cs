@@ -419,7 +419,7 @@ namespace VectorWar {
 				Ship ship = gamestate._ships[i];
 				
 				stringBuilder.Append($"  ship {i} position:  {ship.position.x:F4}, {ship.position.y:F4}\n");
-				stringBuilder.Append($"  ship {i} velocity:  {ship.velocity.x:F4}, {ship.velocity.y:F4}\n");
+				stringBuilder.Append($"  ship {i} velocity:  {ship.deltaVelocity.x:F4}, {ship.deltaVelocity.y:F4}\n");
 				stringBuilder.Append($"  ship {i} radius:    {ship.radius}.\n");
 				stringBuilder.Append($"  ship {i} heading:   {ship.heading}.\n");
 				stringBuilder.Append($"  ship {i} health:    {ship.health}.\n");

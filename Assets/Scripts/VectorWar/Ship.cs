@@ -13,7 +13,7 @@ namespace VectorWar {
 		public const int MAX_BULLETS = 30;
 
 		public Vector2 position;
-		public Vector2 velocity; // TODO actually deltaVelocity
+		public Vector2 deltaVelocity; // TODO actually deltaVelocity
 		public int radius;
 		public int heading;
 		public int health;
