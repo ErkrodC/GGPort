@@ -472,19 +472,19 @@ namespace GGPort {
 							}
 							
 							if (current.value(i) != last.value(i)) {
-								BitVector.BitVector_SetBit(msg.input.bits, ref offset);
+								BitVector.SetBit(msg.input.bits, ref offset);
 								if (current.value(i)) {
-									BitVector.BitVector_SetBit(bits, ref offset);
+									BitVector.SetBit(bits, ref offset);
 								} else {
-									BitVector.BitVector_ClearBit(bits, ref offset);
+									BitVector.ClearBit(bits, ref offset);
 								}
 
-								BitVector.BitVector_WriteNibblet(bits, i, ref offset);
+								BitVector.WriteNibblet(bits, i, ref offset);
 							}
 						}
 					}
 
-					BitVector.BitVector_ClearBit(msg.input.bits, ref offset);
+					BitVector.ClearBit(msg.input.bits, ref offset);
 					last = _last_sent_input = current;
 				}
 			} else {
@@ -632,9 +632,9 @@ namespace GGPort {
 					
 					bool useInputs = currentFrame == _last_received_input.frame + 1;
 
-					while (BitVector.BitVector_ReadBit(bits, ref offset) != 0) {
-						int on = BitVector.BitVector_ReadBit(bits, ref offset);
-						int button = BitVector.BitVector_ReadNibblet(bits, ref offset);
+					while (BitVector.ReadBit(bits, ref offset) != 0) {
+						int on = BitVector.ReadBit(bits, ref offset);
+						int button = BitVector.ReadNibblet(bits, ref offset);
 						if (useInputs) {
 							if (on != 0) {
 								_last_received_input.set(button);
