@@ -25,7 +25,7 @@ namespace GGPort {
 		[Serializable]
 		public struct Header {
 			public ushort magic { get; set; }
-			public ushort sequence_number { get; set; }
+			public ushort SequenceNumber { get; set; }
 			public MsgType type; // packet type
 		}
 		
@@ -54,7 +54,7 @@ namespace GGPort {
 
 		[Serializable]
 		public class Input {
-			public connect_status[] peerConnectStatus = new connect_status[UDP_MSG_MAX_PLAYERS];
+			public ConnectStatus[] peerConnectStatus = new ConnectStatus[UDP_MSG_MAX_PLAYERS];
 
 			public uint startFrame;
 
@@ -82,7 +82,7 @@ namespace GGPort {
 			syncReply = default;
 			qualityReport = default;
 			qualityReply = default;
-			input = default;
+			input = t == MsgType.Input ? new Input() : default;
 			inputAck = default;
 		}
 		
@@ -115,7 +115,7 @@ namespace GGPort {
 			throw new ArgumentException();*/
 			
 			int size = 0;
-			size += sizeof(connect_status) * UDP_MSG_MAX_PLAYERS; // NOTE should be size of array pointer?
+			size += sizeof(ConnectStatus) * UDP_MSG_MAX_PLAYERS; // NOTE should be size of array pointer?
 			size += sizeof(uint);
 			size += sizeof(int);
 			size += sizeof(int);
@@ -143,9 +143,10 @@ namespace GGPort {
 		};
 		
 		// TODO address bitfields
-		public struct connect_status {
-			public bool disconnected;//:1;
-			public int last_frame;//:31;
+		[Serializable]
+		public struct ConnectStatus {
+			public bool IsDisconnected;//:1;
+			public int LastFrame;//:31;
 		};
 	};
 }

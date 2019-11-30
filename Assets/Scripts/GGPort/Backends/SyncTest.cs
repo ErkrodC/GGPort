@@ -2,10 +2,11 @@
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Text;
 
 namespace GGPort {
 	public class SyncTestBackend : GGPOSession {
-		protected GGPOSessionCallbacks _callbacks;
+		protected SessionCallbacks _callbacks;
 		protected Sync _sync;
 		protected int _num_players;
 		protected int _check_distance;
@@ -19,7 +20,7 @@ namespace GGPort {
 		protected GameInput                  _last_input;
 		protected RingBuffer<SavedInfo>  _saved_frames = new RingBuffer<SavedInfo>(32);
 
-		public SyncTestBackend(ref GGPOSessionCallbacks cb, string gamename, int frames, int num_players) {
+		public SyncTestBackend(ref SessionCallbacks cb, string gamename, int frames, int num_players) {
 			_sync = null;
 			_callbacks = cb;
 			_num_players = num_players;
@@ -34,41 +35,41 @@ namespace GGPort {
 			/*
 			 * Initialize the synchronziation layer
 			 */
-			Sync.Config config = new Sync.Config(_callbacks, Sync.MAX_PREDICTION_FRAMES);
+			Sync.Config config = new Sync.Config(_callbacks, Sync.kMaxPredictionFrames);
 			_sync.Init(ref config);
 
 			/*
 			 * Preload the ROM
 			 */
-			_callbacks.begin_game(gamename);
+			_callbacks.BeginGame(gamename);
 		}
 
-		public override GGPOErrorCode DoPoll(int timeout) {
+		public override ErrorCode DoPoll(int timeout) {
 			if (!_running) {
-				GGPOEvent info = new GGPOEvent(GGPOEventCode.GGPO_EVENTCODE_RUNNING);
+				GGPOEvent info = new GGPOEvent(GGPOEventCode.Running);
 				
-				_callbacks.on_event(ref info);
+				_callbacks.OnEvent(ref info);
 				_running = true;
 			}
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
-		public override GGPOErrorCode AddPlayer(ref GGPOPlayer player, out GGPOPlayerHandle handle) {
-			if (player.player_num < 1 || player.player_num > _num_players) {
+		public override ErrorCode AddPlayer(ref GGPOPlayer player, out GGPOPlayerHandle handle) {
+			if (player.PlayerNum < 1 || player.PlayerNum > _num_players) {
 				handle = new GGPOPlayerHandle(-1);
-				return GGPOErrorCode.GGPO_ERRORCODE_PLAYER_OUT_OF_RANGE;
+				return ErrorCode.PlayerOutOfRange;
 			}
 			
-			handle = new GGPOPlayerHandle(player.player_num - 1);
-			return GGPOErrorCode.GGPO_OK;
+			handle = new GGPOPlayerHandle(player.PlayerNum - 1);
+			return ErrorCode.Success;
 		}
 
-		public override unsafe GGPOErrorCode AddLocalInput(GGPOPlayerHandle player, object value, int size) {
+		public override unsafe ErrorCode AddLocalInput(GGPOPlayerHandle player, byte[] value, int size) {
 			if (!_running) {
-				return GGPOErrorCode.GGPO_ERRORCODE_NOT_SYNCHRONIZED;
+				return ErrorCode.NotSynchronized;
 			}
 
-			int index = player.handleValue;
+			int index = player.HandleValue;
 			
 			byte[] valByteArr = new byte[size];
 			BinaryFormatter bf = new BinaryFormatter();
@@ -79,10 +80,10 @@ namespace GGPort {
 			for (int i = 0; i < size; i++) {
 				_current_input.bits[index * size + i] |= valByteArr[i];
 			}
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
-		public override unsafe GGPOErrorCode SyncInput(ref Array values, int size, ref int? disconnect_flags) {
+		public override unsafe ErrorCode SyncInput(ref Array values, int size, ref int? disconnect_flags) {
 			BeginLog(false);
 			
 			if (_rollingback) {
@@ -102,18 +103,18 @@ namespace GGPort {
 				disconnect_flags = 0;
 			}
 			
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
-		public override GGPOErrorCode IncrementFrame() {
+		public override ErrorCode IncrementFrame() {
 			_sync.IncrementFrame();
 			_current_input.erase();
    
-			LogUtil.Log($"End of frame({_sync.GetFrameCount()})...\n");
+			LogUtil.Log($"End of frame({_sync.GetFrameCount()})...{Environment.NewLine}");
 			EndLog();
 
 			if (_rollingback) {
-				return GGPOErrorCode.GGPO_OK;
+				return ErrorCode.Success;
 			}
 
 			int frame = _sync.GetFrameCount();
@@ -142,7 +143,7 @@ namespace GGPort {
 
 				_rollingback = true;
 				while(!_saved_frames.empty()) {
-					_callbacks.advance_frame(0);
+					_callbacks.AdvanceFrame(0);
 
 					// Verify that the checksumn of this frame is the same as the one in our
 					// list.
@@ -158,17 +159,17 @@ namespace GGPort {
 						RaiseSyncError("Checksum for frame %d does not match saved (%d != %d)", frame, checksum, info.checksum);
 					}
 					
-					Console.WriteLine($"Checksum {checksum:00000000} for frame {info.frame} matches.\n");
+					Console.WriteLine($"Checksum {checksum:00000000} for frame {info.frame} matches.{Environment.NewLine}");
 					info.FreeBuffer();
 				}
 				_last_verified = frame;
 				_rollingback = false;
 			}
 
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
-		public virtual GGPOErrorCode Logv(string fmt, params object[] args) {
+		public virtual ErrorCode Logv(string fmt, params object[] args) {
 			if (_logfp != null) {
 				char[] msg = string.Format(fmt, args).ToCharArray();
 				byte[] buf = new byte[msg.Length];
@@ -177,7 +178,7 @@ namespace GGPort {
 				_logfp.Write(buf, 0, msg.Length);
 			}
 			
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
 		protected struct SavedInfo {
@@ -220,11 +221,10 @@ namespace GGPort {
 
 		protected void EndLog() {
 			if (_logfp != null) {
-				char[] msg = "Closing log file.\n".ToCharArray();
-				byte[] buf = new byte[msg.Length];
-				Buffer.BlockCopy(msg, 0, buf, 0, msg.Length);
+				string msg = $"Closing log file.{Environment.NewLine}";
+				byte[] buffer = Encoding.UTF8.GetBytes(msg);
 
-				_logfp.Write(buf, 0, msg.Length);
+				_logfp.Write(buffer, 0, buffer.Length);
 				_logfp.Close();
 				_logfp = null;
 			}
@@ -232,10 +232,10 @@ namespace GGPort {
 
 		protected void LogSaveStates(SavedInfo info) {
 			string filename = $"synclogs\\state-{_sync.GetFrameCount():0000}-original.log";
-			_callbacks.log_game_state(filename, info.buf, info.cbuf);
+			_callbacks.LogGameState(filename, info.buf, info.cbuf);
 
 			filename = $"synclogs\\state-{_sync.GetFrameCount():0000}-replay.log";
-			_callbacks.log_game_state(filename, _sync.GetLastSavedFrame().buf, _sync.GetLastSavedFrame().cbuf);
+			_callbacks.LogGameState(filename, _sync.GetLastSavedFrame().buf, _sync.GetLastSavedFrame().cbuf);
 		}
 	};
 }

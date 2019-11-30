@@ -44,7 +44,7 @@ namespace VectorWar {
 
 		public void SetConnectState(GGPOPlayerHandle handle, PlayerConnectState state) {
 			for (int i = 0; i < num_players; i++) {
-				if (players[i].handle.handleValue == handle.handleValue) {
+				if (players[i].handle.HandleValue == handle.HandleValue) {
 					players[i].connect_progress = 0;
 					players[i].state = state;
 					break;
@@ -60,7 +60,7 @@ namespace VectorWar {
 
 		public void SetDisconnectTimeout(GGPOPlayerHandle handle, long when, int timeout) {
 			for (int i = 0; i < num_players; i++) {
-				if (players[i].handle.handleValue == handle.handleValue) {
+				if (players[i].handle.HandleValue == handle.HandleValue) {
 					players[i].disconnect_start = when;
 					players[i].disconnect_timeout = timeout;
 					players[i].state = PlayerConnectState.Disconnecting;
@@ -71,7 +71,7 @@ namespace VectorWar {
 
 		public void UpdateConnectProgress(GGPOPlayerHandle handle, int progress) {
 			for (int i = 0; i < num_players; i++) {
-				if (players[i].handle.handleValue == handle.handleValue) {
+				if (players[i].handle.HandleValue == handle.HandleValue) {
 					players[i].connect_progress = progress;
 					break;
 				}

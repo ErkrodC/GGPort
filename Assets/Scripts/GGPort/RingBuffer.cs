@@ -31,7 +31,7 @@ namespace GGPort {
 		public void pop() {
 			if (_size == _capacity) { throw new ArgumentOutOfRangeException(); }
 
-			_tail = (_tail + 1) & _capacity;
+			_tail = (_tail + 1) % _capacity;
 			_size--;
 		}
 

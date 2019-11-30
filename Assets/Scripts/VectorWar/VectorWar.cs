@@ -5,7 +5,6 @@ using System.Text;
 using GGPort;
 using System.Threading;
 using UnityEngine;
-using static GGPort.GGPortMain;
 
 //#define SYNC_TEST    // test: turn on synctest
 
@@ -37,21 +36,21 @@ namespace VectorWar {
 		};
 
 		public static void VectorWar_Init(ushort localport, int num_players, GGPOPlayer[] players, int num_spectators) {
-			GGPOErrorCode result;
+			ErrorCode result;
 
 			// Initialize the game state
 			gs.Init(num_players);
 			ngs.num_players = num_players;
 
 			// Fill in a ggpo callbacks structure to pass to start_session.
-			GGPOSessionCallbacks cb = new GGPOSessionCallbacks {
-				begin_game = vw_begin_game_callback,
-				advance_frame = vw_advance_frame_callback,
-				load_game_state = vw_load_game_state_callback,
-				save_game_state = vw_save_game_state_callback,
-				free_buffer = vw_free_buffer,
-				on_event = vw_on_event_callback,
-				log_game_state = vw_log_game_state
+			SessionCallbacks cb = new SessionCallbacks {
+				BeginGame = vw_begin_game_callback,
+				AdvanceFrame = vw_advance_frame_callback,
+				LoadGameState = vw_load_game_state_callback,
+				SaveGameState = vw_save_game_state_callback,
+				FreeBuffer = vw_free_buffer,
+				OnEvent = vw_on_event_callback,
+				LogGameState = vw_log_game_state
 			};
 			
 			
@@ -59,25 +58,25 @@ namespace VectorWar {
 #if SYNC_TEST
 			result = GGPOMain.ggpo_start_synctest(ref ggpo, ref cb, "vectorwar", num_players, sizeof(int), 1);
 #else
-			result = ggpo_start_session(out ggpo, ref cb, "vectorwar", num_players, sizeof(int), localport);
+			result = SessionInterface.ggpo_start_session(out ggpo, ref cb, "vectorwar", num_players, sizeof(int), localport);
 #endif
 
 			// automatically disconnect clients after 3000 ms and start our count-down timer
 			// for disconnects after 1000 ms.   To completely disable disconnects, simply use
 			// a value of 0 for ggpo_set_disconnect_timeout.
-			ggpo_set_disconnect_timeout(ref ggpo, 3000);
-			ggpo_set_disconnect_notify_start(ref ggpo, 1000);
+			SessionInterface.ggpo_set_disconnect_timeout(ref ggpo, 3000);
+			SessionInterface.ggpo_set_disconnect_notify_start(ref ggpo, 1000);
 
 			int i;
 			for (i = 0; i < num_players + num_spectators; i++) {
-				result = ggpo_add_player(ref ggpo, ref players[i], out GGPOPlayerHandle handle);
+				result = SessionInterface.ggpo_add_player(ref ggpo, ref players[i], out GGPOPlayerHandle handle);
 				ngs.players[i].handle = handle;
-				ngs.players[i].type = players[i].type;
-				if (players[i].type == GGPOPlayerType.GGPO_PLAYERTYPE_LOCAL) {
+				ngs.players[i].type = players[i].Type;
+				if (players[i].Type == GGPOPlayerType.Local) {
 					ngs.players[i].connect_progress = 100;
 					ngs.local_player_handle = handle;
 					ngs.SetConnectState(handle, PlayerConnectState.Connecting);
-					ggpo_set_frame_delay(ref ggpo, handle, FRAME_DELAY);
+					SessionInterface.ggpo_set_frame_delay(ref ggpo, handle, FRAME_DELAY);
 				} else {
 					ngs.players[i].connect_progress = 0;
 				}
@@ -93,24 +92,24 @@ namespace VectorWar {
 		* Create a new spectator session
 		*/
 		public static void VectorWar_InitSpectator(ushort localport, int num_players, IPEndPoint hostEndPoint) {
-			GGPOErrorCode result;
+			ErrorCode result;
 
 			// Initialize the game state
 			gs.Init(num_players);
 			ngs.num_players = num_players;
 
 			// Fill in a ggpo callbacks structure to pass to start_session.
-			GGPOSessionCallbacks cb = new GGPOSessionCallbacks {
-				begin_game = vw_begin_game_callback,
-				advance_frame = vw_advance_frame_callback,
-				load_game_state = vw_load_game_state_callback,
-				save_game_state = vw_save_game_state_callback,
-				free_buffer = vw_free_buffer,
-				on_event = vw_on_event_callback,
-				log_game_state = vw_log_game_state
+			SessionCallbacks cb = new SessionCallbacks {
+				BeginGame = vw_begin_game_callback,
+				AdvanceFrame = vw_advance_frame_callback,
+				LoadGameState = vw_load_game_state_callback,
+				SaveGameState = vw_save_game_state_callback,
+				FreeBuffer = vw_free_buffer,
+				OnEvent = vw_on_event_callback,
+				LogGameState = vw_log_game_state
 			};
 
-			result = ggpo_start_spectating(
+			result = SessionInterface.ggpo_start_spectating(
 				ref ggpo,
 				ref cb,
 				"vectorwar",
@@ -133,11 +132,11 @@ namespace VectorWar {
 		public static void VectorWar_DisconnectPlayer(int player) {
 			if (player >= ngs.num_players) { return; }
 
-			GGPOErrorCode result = ggpo_disconnect_player(ref ggpo, ngs.players[player].handle);
+			ErrorCode result = SessionInterface.ggpo_disconnect_player(ref ggpo, ngs.players[player].handle);
 
-			string logMsg = GGPort.Globals.GGPO_SUCCEEDED(result)
-				? $"Disconnected player {player}.\n"
-				: $"Error while disconnecting player (err:{result}).\n";
+			string logMsg = GGPort.Types.GGPOSucceeded(result)
+				? $"Disconnected player {player}.{Environment.NewLine}"
+				: $"Error while disconnecting player (err:{result}).{Environment.NewLine}";
 
 			renderer.SetStatusText(logMsg);
 		}
@@ -171,13 +170,13 @@ namespace VectorWar {
 			}
 
 			// Notify ggpo that we've moved forward exactly 1 frame.
-			ggpo_advance_frame(ref ggpo);
+			SessionInterface.ggpo_advance_frame(ref ggpo);
 
 			// Update the performance monitor display.
 			GGPOPlayerHandle[] handles = new GGPOPlayerHandle[MAX_PLAYERS];
 			int count = 0;
 			for (int i = 0; i < ngs.num_players; i++) {
-				if (ngs.players[i].type == GGPOPlayerType.GGPO_PLAYERTYPE_REMOTE) {
+				if (ngs.players[i].type == GGPOPlayerType.Remote) {
 					handles[count++] = ngs.players[i].handle;
 				}
 			}
@@ -218,8 +217,9 @@ namespace VectorWar {
 		*
 		* Run a single frame of the game.
 		*/
+		private static byte[] serializedInput = new byte[4];
 		public static void VectorWar_RunFrame() {
-			GGPOErrorCode result = GGPOErrorCode.GGPO_OK;
+			ErrorCode result = ErrorCode.Success;
 			int disconnect_flags = 0;
 			int[] inputs = new int[GameState.MAX_SHIPS];
 
@@ -227,20 +227,25 @@ namespace VectorWar {
 				inputs[i] = 0;
 			}
 
-			if (ngs.local_player_handle.handleValue != GGPOPlayerHandle.GGPO_INVALID_HANDLE) {
+			if (ngs.local_player_handle.HandleValue != GGPOPlayerHandle.kInvalidHandle) {
 				int input = ReadInputs();
 #if SYNC_TEST
 				input = rand(); // test: use random inputs to demonstrate sync testing
 #endif
-				result = ggpo_add_local_input(ref ggpo, ngs.local_player_handle, input, sizeof(int)); // NOTE hardcoding input type
+				serializedInput[0] = (byte) input;
+				serializedInput[1] = (byte) (input >> 8);
+				serializedInput[2] = (byte) (input >> 16);
+				serializedInput[3] = (byte) (input >> 24);
+
+				result = SessionInterface.ggpo_add_local_input(ref ggpo, ngs.local_player_handle, serializedInput, sizeof(int)); // NOTE hardcoding input type
 			}
 
 			// synchronize these inputs with ggpo.  If we have enough input to proceed
 			// ggpo will modify the input list with the correct inputs to use and
 			// return 1.
-			if (GGPort.Globals.GGPO_SUCCEEDED(result)) {
-				result = ggpo_synchronize_input(ref ggpo, inputs, sizeof(int) * GameState.MAX_SHIPS, disconnect_flags);
-				if (GGPort.Globals.GGPO_SUCCEEDED(result)) {
+			if (GGPort.Types.GGPOSucceeded(result)) {
+				result = SessionInterface.ggpo_synchronize_input(ref ggpo, inputs, sizeof(int) * GameState.MAX_SHIPS, disconnect_flags);
+				if (GGPort.Types.GGPOSucceeded(result)) {
 					// inputs[0] and inputs[1] contain the inputs for p1 and p2.  Advance
 					// the game by 1 frame using those inputs.
 					VectorWar_AdvanceFrame(inputs, disconnect_flags);
@@ -257,7 +262,7 @@ namespace VectorWar {
 		* for its internal bookkeeping.
 		*/
 		public static void VectorWar_Idle(int time) {
-			ggpo_idle(ref ggpo, time);
+			SessionInterface.ggpo_idle(ref ggpo, time);
 		}
 
 		public static void VectorWar_Exit() {
@@ -266,7 +271,7 @@ namespace VectorWar {
 			ngs = TODO_memsetZero;*/
 
 			if (ggpo != null) {
-				ggpo_close_session(ref ggpo);
+				SessionInterface.ggpo_close_session(ref ggpo);
 				ggpo = null;
 			}
 
@@ -330,33 +335,34 @@ namespace VectorWar {
 		public static bool vw_on_event_callback(ref GGPOEvent info) {
 			int progress;
 			switch (info.code) {
-				case GGPOEventCode.GGPO_EVENTCODE_CONNECTED_TO_PEER:
+				case GGPOEventCode.ConnectedToPeer:
 					ngs.SetConnectState(info.connected.player, PlayerConnectState.Synchronizing);
+					renderer.SetStatusText($"Connected to player {info.connected.player.HandleValue}");
 					break;
-				case GGPOEventCode.GGPO_EVENTCODE_SYNCHRONIZING_WITH_PEER:
+				case GGPOEventCode.SynchronizingWithPeer:
 					progress = 100 * info.synchronizing.count / info.synchronizing.total;
 					ngs.UpdateConnectProgress(info.synchronizing.player, progress);
 					break;
-				case GGPOEventCode.GGPO_EVENTCODE_SYNCHRONIZED_WITH_PEER:
+				case GGPOEventCode.SynchronizedWithPeer:
 					ngs.UpdateConnectProgress(info.synchronized.player, 100);
 					break;
-				case GGPOEventCode.GGPO_EVENTCODE_RUNNING:
+				case GGPOEventCode.Running:
 					ngs.SetConnectState(PlayerConnectState.Running);
 					renderer.SetStatusText("");
 					break;
-				case GGPOEventCode.GGPO_EVENTCODE_CONNECTION_INTERRUPTED:
-					ngs.SetDisconnectTimeout(info.connection_interrupted.player,
+				case GGPOEventCode.ConnectionInterrupted:
+					ngs.SetDisconnectTimeout(info.connectionInterrupted.player,
 						Platform.GetCurrentTimeMS(),
-						info.connection_interrupted.disconnect_timeout);
+						info.connectionInterrupted.disconnect_timeout);
 					break;
-				case GGPOEventCode.GGPO_EVENTCODE_CONNECTION_RESUMED:
-					ngs.SetConnectState(info.connection_resumed.player, PlayerConnectState.Running);
+				case GGPOEventCode.ConnectionResumed:
+					ngs.SetConnectState(info.connectionResumed.player, PlayerConnectState.Running);
 					break;
-				case GGPOEventCode.GGPO_EVENTCODE_DISCONNECTED_FROM_PEER:
+				case GGPOEventCode.DisconnectedFromPeer:
 					ngs.SetConnectState(info.disconnected.player, PlayerConnectState.Disconnected);
 					break;
-				case GGPOEventCode.GGPO_EVENTCODE_TIMESYNC:
-					Thread.Sleep(1000 * info.timesync.frames_ahead / 60);
+				case GGPOEventCode.TimeSync:
+					Thread.Sleep(1000 * info.timeSync.framesAhead / 60);
 					break;
 			}
 			return true;
@@ -374,7 +380,7 @@ namespace VectorWar {
 
 			// Make sure we fetch new inputs from GGPO and use those to update
 			// the game state instead of reading from the keyboard.
-			ggpo_synchronize_input(ref ggpo, inputs, sizeof(int) * GameState.MAX_SHIPS, disconnect_flags);
+			SessionInterface.ggpo_synchronize_input(ref ggpo, inputs, sizeof(int) * GameState.MAX_SHIPS, disconnect_flags);
 			VectorWar_AdvanceFrame(inputs, disconnect_flags);
 			return true;
 		}
@@ -397,7 +403,7 @@ namespace VectorWar {
 		*/
 		public static bool vw_save_game_state_callback(ref byte[] buffer, ref int len, ref int checksum, int frame) {
 			len = gs.Size();
-			gs.Serialize(ref buffer);
+			gs.Serialize(len, out buffer);
 			checksum = fletcher32_checksum(buffer);
 			return true;
 		}
@@ -411,25 +417,25 @@ namespace VectorWar {
 			FileStream fp = File.Open(filename, FileMode.OpenOrCreate, FileAccess.Write);
 
 			GameState gamestate = new GameState(buffer);
-			StringBuilder stringBuilder = new StringBuilder("GameState object.\n");
-			stringBuilder.Append($"  bounds: {gamestate._bounds.xMin},{gamestate._bounds.yMin} x {gamestate._bounds.xMax},{gamestate._bounds.yMax}.\n");
-			stringBuilder.Append($"  num_ships: {gamestate._num_ships}.\n");
+			StringBuilder stringBuilder = new StringBuilder($"GameState object.{Environment.NewLine}");
+			stringBuilder.Append($"  bounds: {gamestate._bounds.xMin},{gamestate._bounds.yMin} x {gamestate._bounds.xMax},{gamestate._bounds.yMax}.{Environment.NewLine}");
+			stringBuilder.Append($"  num_ships: {gamestate._num_ships}.{Environment.NewLine}");
 			
 			for (int i = 0; i < gamestate._num_ships; i++) {
 				Ship ship = gamestate._ships[i];
 				
-				stringBuilder.Append($"  ship {i} position:  {ship.position.x:F4}, {ship.position.y:F4}\n");
-				stringBuilder.Append($"  ship {i} velocity:  {ship.deltaVelocity.x:F4}, {ship.deltaVelocity.y:F4}\n");
-				stringBuilder.Append($"  ship {i} radius:    {ship.radius}.\n");
-				stringBuilder.Append($"  ship {i} heading:   {ship.heading}.\n");
-				stringBuilder.Append($"  ship {i} health:    {ship.health}.\n");
-				stringBuilder.Append($"  ship {i} speed:     {ship.speed}.\n");
-				stringBuilder.Append($"  ship {i} cooldown:  {ship.cooldown}.\n");
-				stringBuilder.Append($"  ship {i} score:     {ship.score}.\n");
+				stringBuilder.Append($"  ship {i} position:  {ship.position.x:F4}, {ship.position.y:F4}{Environment.NewLine}");
+				stringBuilder.Append($"  ship {i} velocity:  {ship.deltaVelocity.x:F4}, {ship.deltaVelocity.y:F4}{Environment.NewLine}");
+				stringBuilder.Append($"  ship {i} radius:    {ship.radius}.{Environment.NewLine}");
+				stringBuilder.Append($"  ship {i} heading:   {ship.heading}.{Environment.NewLine}");
+				stringBuilder.Append($"  ship {i} health:    {ship.health}.{Environment.NewLine}");
+				stringBuilder.Append($"  ship {i} speed:     {ship.speed}.{Environment.NewLine}");
+				stringBuilder.Append($"  ship {i} cooldown:  {ship.cooldown}.{Environment.NewLine}");
+				stringBuilder.Append($"  ship {i} score:     {ship.score}.{Environment.NewLine}");
 				
 				for (int j = 0; j < Ship.MAX_BULLETS; j++) {
 					Bullet bullet = ship.bullets[j];
-					stringBuilder.Append($"  ship {i} bullet {j}: {bullet.position.x:F2} {bullet.position.y:F2} -> {bullet.velocity.x} {bullet.velocity.y}.\n");
+					stringBuilder.Append($"  ship {i} bullet {j}: {bullet.position.x:F2} {bullet.position.y:F2} -> {bullet.velocity.x} {bullet.velocity.y}.{Environment.NewLine}");
 				}
 			}
 

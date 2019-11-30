@@ -46,7 +46,7 @@ namespace GGPort {
 			_poll = poll;
 			_poll.RegisterLoop(this);
 
-			Log($"binding udp socket to port {port}.\n");
+			Log($"binding udp socket to port {port}.{Environment.NewLine}");
 			_socket = CreateSocket(port, 0);
 		}
 	   
@@ -54,27 +54,30 @@ namespace GGPort {
 
 			try {
 				int res = _socket.SendTo(buffer, len, flags, dst);
-				Log($"sent packet length {len} to {dst.Address}:{dst.Port} (ret:{res}).\n");
+				Log($"sent packet length {len} to {dst.Address}:{dst.Port} (ret:{res}).{Environment.NewLine}");
 			} catch (Exception e) {
-				Log($"{e.Message}.\n");
+				Log($"{e.Message}.{Environment.NewLine}");
 				throw;
 			}
 		}
 
-		public virtual bool OnLoopPoll(ref object cookie) {
+		public virtual bool OnLoopPoll(object cookie) {
 			byte[] recv_buf = new byte[MAX_UDP_PACKET_SIZE];
 
 			EndPoint recv_addr = new IPEndPoint(IPAddress.Any, 0);
 			
 			for (;;) {
 				try {
+					if (_socket.Available <= 0) {
+						break;
+					}
 					int len = _socket.ReceiveFrom(recv_buf, MAX_UDP_PACKET_SIZE, SocketFlags.None, ref recv_addr);
 
 					if (recv_addr is IPEndPoint recvAddrIP) {
-						Log($"recvfrom returned (len:{len}  from:{recvAddrIP.Address}:{recvAddrIP.Port}).\n");
+						Log($"recvfrom returned (len:{len}  from:{recvAddrIP.Address}:{recvAddrIP.Port}).{Environment.NewLine}");
 						IFormatter br = new BinaryFormatter();
 						using (MemoryStream ms = new MemoryStream(recv_buf)) {
-							UDPMessage msg = (UDPMessage) br.Deserialize(ms);
+							UDPMessage msg = (UDPMessage) br.Deserialize(ms); // TODO deserialization probably doesn't work? why does it work for syncing but not input?
 							_callbacks.OnMsg(recvAddrIP, ref msg, len);
 						} // TODO optimize refactor
 					} else {
@@ -83,7 +86,7 @@ namespace GGPort {
 
 					// TODO: handle len == 0... indicates a disconnect.
 				} catch (Exception e) {
-					Log($"{e.Message}\n");
+					Log($"{e.Message}{Environment.NewLine}");
 					break;
 				} 
 			}
@@ -101,7 +104,7 @@ namespace GGPort {
 			for (ushort port = bind_port; port <= bind_port + retries; port++) {
 				try {
 					s.Bind(new IPEndPoint(IPAddress.Any, port));
-					Log($"Udp bound to port: {port}.\n");
+					Log($"Udp bound to port: {port}.{Environment.NewLine}");
 					return s;
 				} catch (Exception e) {
 					Console.WriteLine(e);
@@ -117,7 +120,6 @@ namespace GGPort {
 		public virtual bool OnHandlePoll(object TODO) { return true; }
 		public virtual bool OnMsgPoll(object TODO) { return true; }
 		public virtual bool OnPeriodicPoll(object TODO0, long TODO1) { return true; }
-		public virtual bool OnLoopPoll(object cookie) { return true; }
 		
 		public struct Stats {
 			public readonly int bytes_sent;

@@ -64,7 +64,7 @@ namespace GGPort {
 			// sleep for.
 			int sleep_frames = (int)(((radvantage - advantage) / 2) + 0.5);
 
-			LogUtil.Log($"iteration {count}:  sleep frames is {sleep_frames}\n");
+			LogUtil.Log($"iteration {count}:  sleep frames is {sleep_frames}{Environment.NewLine}");
 
 			// Some things just aren't worth correcting for.  Make sure
 			// the difference is relevant before proceeding.
@@ -77,7 +77,7 @@ namespace GGPort {
 			if (require_idle_input) {
 				for (i = 1; i < _last_inputs.Length; i++) {
 					if (!_last_inputs[i].equal(ref _last_inputs[0], true)) {
-						LogUtil.Log($"iteration {count}:  rejecting due to input stuff at position {i}...!!!\n");
+						LogUtil.Log($"iteration {count}:  rejecting due to input stuff at position {i}...!!!{Environment.NewLine}");
 						return 0;
 					}
 				}

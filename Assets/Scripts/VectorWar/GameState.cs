@@ -13,6 +13,7 @@ using GGPort;
 using UnityEngine;
 
 namespace VectorWar {
+	[Serializable]
 	public class GameState {
 		public const int MAX_SHIPS = 4;
 
@@ -35,7 +36,7 @@ namespace VectorWar {
 		public void Init(int num_players) {
 			int i, w, h, r;
 
-			_bounds = Screen.safeArea;
+			_bounds = new Rect(Screen.safeArea);
 
 			w = Convert.ToInt32(_bounds.xMax - _bounds.xMin); // NOTE possible source of non-determinism
 			h = Convert.ToInt32(_bounds.yMax - _bounds.yMin);
@@ -73,7 +74,7 @@ namespace VectorWar {
 		public void ParseShipInputs(int inputs, int i, out float heading, out float thrust, out int fire) {
 			Ship ship = _ships[i];
 
-			GGPortMain.ggpo_log(ref Globals.ggpo, $"parsing ship {i} inputs: {inputs}.\n");
+			SessionInterface.ggpo_log(ref Globals.ggpo, $"parsing ship {i} inputs: {inputs}.{Environment.NewLine}");
 
 			if ((inputs & (int) Globals.VectorWarInputs.INPUT_ROTATE_RIGHT) != 0) {
 				heading = (ship.heading + Ship.ROTATE_INCREMENT) % 360;
@@ -97,16 +98,16 @@ namespace VectorWar {
 		public void MoveShip(int which, float heading, float thrust, int fire) {
 			Ship ship = _ships[which];
 
-			GGPortMain.ggpo_log(
+			SessionInterface.ggpo_log(
 				ref Globals.ggpo,
-				$"calculation of new ship coordinates: (thrust:{thrust:F4} heading:{heading:F4}).\n"
+				$"calculation of new ship coordinates: (thrust:{thrust:F4} heading:{heading:F4}).{Environment.NewLine}"
 			);
 
 			ship.heading = (int) heading;
 
 			if (ship.cooldown == 0) {
 				if (fire != 0) {
-					GGPortMain.ggpo_log(ref Globals.ggpo, "firing bullet.\n");
+					SessionInterface.ggpo_log(ref Globals.ggpo, $"firing bullet.{Environment.NewLine}");
 					for (int i = 0; i < Ship.MAX_BULLETS; i++) {
 						float dx = (float) Math.Cos(
 							MathUtil.degtorad(ship.heading)
@@ -143,16 +144,16 @@ namespace VectorWar {
 				}
 			}
 
-			GGPortMain.ggpo_log(
+			SessionInterface.ggpo_log(
 				ref Globals.ggpo,
-				$"new ship velocity: (dx:{ship.deltaVelocity.x:F4} dy:{ship.deltaVelocity.y:F4}).\n"
+				$"new ship velocity: (dx:{ship.deltaVelocity.x:F4} dy:{ship.deltaVelocity.y:F4}).{Environment.NewLine}"
 			);
 
 			ship.position.x += ship.deltaVelocity.x;
 			ship.position.y += ship.deltaVelocity.y;
-			GGPortMain.ggpo_log(
+			SessionInterface.ggpo_log(
 				ref Globals.ggpo,
-				$"new ship position: (dx:{ship.position.x:F4} dy:{ship.position.y:F4}).\n"
+				$"new ship position: (dx:{ship.position.x:F4} dy:{ship.position.y:F4}).{Environment.NewLine}"
 			);
 
 			// TODO this might not work as expected, bouncing of screen bounds
@@ -247,25 +248,35 @@ namespace VectorWar {
 				+ sizeof(Rect)
 				+ sizeof(int)
 				+ Ship.Size() * MAX_SHIPS;
-
-			/*public int _framenumber;
-			Rect _bounds;
-			int _num_ships;
-			Ship[] _ships = new Ship[MAX_SHIPS];*/
 		}
 
-		public void Serialize(ref byte[] buffer) {
+		public void Serialize(int size, out byte[] buffer) {
 			// TODO init in outer scope
 			BinaryFormatter bf = new BinaryFormatter();
-			using (MemoryStream ms = new MemoryStream(buffer)) {
+			using (MemoryStream ms = new MemoryStream(size)) {
 				bf.Serialize(ms, this);
+				buffer = ms.ToArray();
 			}
 		}
 
 		public byte[] Serialize() {
-			byte[] serializedGameState = new byte[Size()];
-			Serialize(ref serializedGameState);
+			Serialize(Size(), out byte[] serializedGameState);
 			return serializedGameState;
+		}
+	}
+
+	[Serializable]
+	public struct Rect {
+		public float xMin;
+		public float xMax;
+		public float yMin;
+		public float yMax;
+
+		public Rect(UnityEngine.Rect rect) {
+			xMin = rect.xMin;
+			xMax = rect.xMax;
+			yMin = rect.yMin;
+			yMax = rect.yMax;
 		}
 	}
 }

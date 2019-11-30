@@ -10,12 +10,12 @@ namespace GGPort {
 		const int DEFAULT_DISCONNECT_TIMEOUT = 5000;
 		const int DEFAULT_DISCONNECT_NOTIFY_START = 750;
 
-		protected GGPOSessionCallbacks _callbacks;
+		protected SessionCallbacks _callbacks;
 		protected Poll _poll;
 		protected Sync _sync;
 		protected UDP _udp;
 		protected UDPProtocol[] _endpoints;
-		protected UDPProtocol[] _spectators = new UDPProtocol[Globals.GGPO_MAX_SPECTATORS];
+		protected UDPProtocol[] _spectators = new UDPProtocol[Types.kMaxSpectators];
 		protected int _num_spectators;
 		protected int _input_size;
 
@@ -27,10 +27,10 @@ namespace GGPort {
 		protected uint _disconnect_timeout;
 		protected uint _disconnect_notify_start;
 
-		protected UDPMessage.connect_status[] _local_connect_status = new UDPMessage.connect_status[UDPMessage.UDP_MSG_MAX_PLAYERS];
+		protected UDPMessage.ConnectStatus[] _local_connect_status = new UDPMessage.ConnectStatus[UDPMessage.UDP_MSG_MAX_PLAYERS];
 
 		public PeerToPeerBackend(
-			ref GGPOSessionCallbacks cb,
+			ref SessionCallbacks cb,
 			string gameName,
 			ushort localPort,
 			int numPlayers,
@@ -50,7 +50,7 @@ namespace GGPort {
 			// Initialize the synchronization layer
 			Sync.Config config = new Sync.Config(
 				_callbacks,
-				Sync.MAX_PREDICTION_FRAMES,
+				Sync.kMaxPredictionFrames,
 				numPlayers,
 				inputSize
 			);
@@ -72,18 +72,18 @@ namespace GGPort {
 			}
 			
 			for (int i = 0; i < _local_connect_status.Length; i++) {
-				_local_connect_status[i].last_frame = -1;
+				_local_connect_status[i].LastFrame = -1;
 			}
 
 			// Preload the ROM
-			_callbacks.begin_game(gameName);
+			_callbacks.BeginGame(gameName);
 		}
 
 		~PeerToPeerBackend() {
 			_endpoints = null;
 		}
 
-		public override unsafe GGPOErrorCode DoPoll(int timeout) {
+		public override unsafe ErrorCode DoPoll(int timeout) {
 			if (!_sync.InRollback()) {
 			   _poll.Pump(0);
 
@@ -106,7 +106,7 @@ namespace GGPort {
 					   total_min_confirmed = PollNPlayers(current_frame);
 				   }
 
-				   Log($"last confirmed frame in p2p backend is {total_min_confirmed}.\n");
+				   Log($"last confirmed frame in p2p backend is {total_min_confirmed}.{Environment.NewLine}");
 				   if (total_min_confirmed >= 0) {
 					   if (total_min_confirmed == int.MaxValue) {
 						   throw new ArgumentException();
@@ -114,7 +114,7 @@ namespace GGPort {
 					   
 					   if (_num_spectators > 0) {
 						   while (_next_spectator_frame <= total_min_confirmed) {
-							   Log($"pushing frame {_next_spectator_frame} to spectators.\n");
+							   Log($"pushing frame {_next_spectator_frame} to spectators.{Environment.NewLine}");
 
 							   GameInput input = new GameInput {
 								   frame = _next_spectator_frame,
@@ -129,7 +129,7 @@ namespace GGPort {
 						   }
 					   }
 					   
-					   Log($"setting confirmed frame in sync to {total_min_confirmed}.\n");
+					   Log($"setting confirmed frame in sync to {total_min_confirmed}.{Environment.NewLine}");
 					   _sync.SetLastConfirmedFrame(total_min_confirmed);
 				   }
 
@@ -142,12 +142,12 @@ namespace GGPort {
 
 					   if (interval > 0) {
 						   GGPOEvent info = new GGPOEvent {
-							   code = GGPOEventCode.GGPO_EVENTCODE_TIMESYNC,
-							   timesync = {
-								   frames_ahead = interval
+							   code = GGPOEventCode.TimeSync,
+							   timeSync = {
+								   framesAhead = interval
 							   }
 						   };
-						   _callbacks.on_event(ref info);
+						   _callbacks.OnEvent(ref info);
 						   _next_recommended_sleep = current_frame + RECOMMENDATION_INTERVAL;
 					   }
 				   }
@@ -159,63 +159,63 @@ namespace GGPort {
 			   }
 			}
 			
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
-		public override GGPOErrorCode AddPlayer(ref GGPOPlayer player, out GGPOPlayerHandle handle) {
+		public override ErrorCode AddPlayer(ref GGPOPlayer player, out GGPOPlayerHandle handle) {
 			handle = new GGPOPlayerHandle(-1);
-			if (player.type == GGPOPlayerType.GGPO_PLAYERTYPE_SPECTATOR) {
-				return AddSpectator(player.remote);
+			if (player.Type == GGPOPlayerType.Spectator) {
+				return AddSpectator(player.EndPoint);
 			}
 
-			int queue = player.player_num - 1;
-			if (player.player_num < 1 || player.player_num > _num_players) {
-				return GGPOErrorCode.GGPO_ERRORCODE_PLAYER_OUT_OF_RANGE;
+			int queue = player.PlayerNum - 1;
+			if (player.PlayerNum < 1 || player.PlayerNum > _num_players) {
+				return ErrorCode.PlayerOutOfRange;
 			}
 			
 			handle = QueueToPlayerHandle(queue);
 
-			if (player.type == GGPOPlayerType.GGPO_PLAYERTYPE_REMOTE) {
-				AddRemotePlayer(player.remote, queue);
+			if (player.Type == GGPOPlayerType.Remote) {
+				AddRemotePlayer(player.EndPoint, queue);
 			}
 			
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
-		public override GGPOErrorCode AddLocalInput(GGPOPlayerHandle player, object value, int size) {
+		public override ErrorCode AddLocalInput(GGPOPlayerHandle player, byte[] value, int size) {
 			GameInput input = new GameInput();
 
 			if (_sync.InRollback()) {
-				return GGPOErrorCode.GGPO_ERRORCODE_IN_ROLLBACK;
+				return ErrorCode.InRollback;
 			}
 			if (_synchronizing) {
-				return GGPOErrorCode.GGPO_ERRORCODE_NOT_SYNCHRONIZED;
+				return ErrorCode.NotSynchronized;
 			}
    
-			GGPOErrorCode result = PlayerHandleToQueue(player, out int queue);
-			if (!Globals.GGPO_SUCCEEDED(result)) {
+			ErrorCode result = PlayerHandleToQueue(player, out int queue);
+			if (!Types.GGPOSucceeded(result)) {
 				return result;
 			}
 
-			BinaryFormatter bf = new BinaryFormatter();
-			byte[] valByteArr = new byte[size];
-			using (MemoryStream ms = new MemoryStream(valByteArr)) {
-				bf.Serialize(ms, value);
-			} // TODO optimize refactor
+			/*BinaryFormatter formatter = new BinaryFormatter();
+			using (MemoryStream ms = new MemoryStream(size)) {
+				formatter.Serialize(ms, value);
+				input.init(-1, ms.ToArray(), (int) ms.Length);
+			} // TODO optimize/refactor*/
 			
-			input.init(-1, valByteArr, size);
+			input.init(-1, value, value.Length);
 
 			// Feed the input for the current frame into the synchronzation layer.
 			if (!_sync.AddLocalInput(queue, ref input)) {
-				return GGPOErrorCode.GGPO_ERRORCODE_PREDICTION_THRESHOLD;
+				return ErrorCode.PredictionThreshold;
 			}
 
-			if (input.frame != GameInput.NullFrame) { // xxx: <- comment why this is the case
+			if (input.frame != GameInput.kNullFrame) { // xxx: <- comment why this is the case
 				// Update the local connect status state to indicate that we've got a
 				// confirmed local frame for this player.  this must come first so it
 				// gets incorporated into the next packet we send.
-				Log($"setting local connect status for local queue {queue} to {input.frame}");
-				_local_connect_status[queue].last_frame = input.frame;
+				Log($"setting local connect status for local queue {queue} to {input.frame}{Environment.NewLine}");
+				_local_connect_status[queue].LastFrame = input.frame;
 
 				// Send the input to all the remote players.
 				for (int i = 0; i < _num_players; i++) {
@@ -225,13 +225,13 @@ namespace GGPort {
 				}
 			}
 
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
-		public override GGPOErrorCode SyncInput(ref Array values, int size, ref int? disconnect_flags) {
+		public override ErrorCode SyncInput(ref Array values, int size, ref int? disconnect_flags) {
 			// Wait until we've started to return inputs.
 			if (_synchronizing) {
-				return GGPOErrorCode.GGPO_ERRORCODE_NOT_SYNCHRONIZED;
+				return ErrorCode.NotSynchronized;
 			}
 			
 			int flags = _sync.SynchronizeInputs(ref values, size);
@@ -239,16 +239,16 @@ namespace GGPort {
 				disconnect_flags = flags;
 			}
 			
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
-		public override GGPOErrorCode IncrementFrame() {
-			Log($"End of frame ({_sync.GetFrameCount()})...\n");
+		public override ErrorCode IncrementFrame() {
+			Log($"End of frame ({_sync.GetFrameCount()})...{Environment.NewLine}");
 			_sync.IncrementFrame();
 			DoPoll(0);
 			PollSyncEvents();
 
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
 		/*
@@ -256,14 +256,14 @@ namespace GGPort {
 		* decisions to disconnect are a result of us parsing the peer_connect_settings
 		* blob in every endpoint periodically.
 		*/
-		public override GGPOErrorCode DisconnectPlayer(GGPOPlayerHandle player) {
-			GGPOErrorCode result = PlayerHandleToQueue(player, out int queue);
-			if (!Globals.GGPO_SUCCEEDED(result)) {
+		public override ErrorCode DisconnectPlayer(GGPOPlayerHandle player) {
+			ErrorCode result = PlayerHandleToQueue(player, out int queue);
+			if (!Types.GGPOSucceeded(result)) {
 				return result;
 			}
    
-			if (_local_connect_status[queue].disconnected) {
-				return GGPOErrorCode.GGPO_ERRORCODE_PLAYER_DISCONNECTED;
+			if (_local_connect_status[queue].IsDisconnected) {
+				return ErrorCode.PlayerDisconnected;
 			}
 
 			if (!_endpoints[queue].IsInitialized()) {
@@ -271,7 +271,7 @@ namespace GGPort {
 				
 				// xxx: we should be tracking who the local player is, but for now assume
 				// that if the endpoint is not initalized, this must be the local player.
-				Log($"Disconnecting local player {queue} at frame {_local_connect_status[queue].last_frame} by user request.\n");
+				Log($"Disconnecting local player {queue} at frame {_local_connect_status[queue].LastFrame} by user request.{Environment.NewLine}");
 				
 				for (int i = 0; i < _num_players; i++) {
 					if (_endpoints[i].IsInitialized()) {
@@ -279,36 +279,36 @@ namespace GGPort {
 					}
 				}
 			} else {
-				Log($"Disconnecting queue {queue} at frame {_local_connect_status[queue].last_frame} by user request.\n");
-				DisconnectPlayerQueue(queue, _local_connect_status[queue].last_frame);
+				Log($"Disconnecting queue {queue} at frame {_local_connect_status[queue].LastFrame} by user request.{Environment.NewLine}");
+				DisconnectPlayerQueue(queue, _local_connect_status[queue].LastFrame);
 			}
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
-		public override GGPOErrorCode GetNetworkStats(out GGPONetworkStats stats, GGPOPlayerHandle player) {
+		public override ErrorCode GetNetworkStats(out GGPONetworkStats stats, GGPOPlayerHandle player) {
 			stats = default;
 
-			GGPOErrorCode result = PlayerHandleToQueue(player, out int queue);
-			if (!Globals.GGPO_SUCCEEDED(result)) {
+			ErrorCode result = PlayerHandleToQueue(player, out int queue);
+			if (!Types.GGPOSucceeded(result)) {
 				return result;
 			}
 			
 			_endpoints[queue].GetNetworkStats(ref stats);
 
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
-		public override GGPOErrorCode SetFrameDelay(GGPOPlayerHandle player, int delay) {
-			GGPOErrorCode result = PlayerHandleToQueue(player, out int queue);
-			if (!Globals.GGPO_SUCCEEDED(result)) {
+		public override ErrorCode SetFrameDelay(GGPOPlayerHandle player, int delay) {
+			ErrorCode result = PlayerHandleToQueue(player, out int queue);
+			if (!Types.GGPOSucceeded(result)) {
 				return result;
 			}
 			
 			_sync.SetFrameDelay(queue, delay);
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
-		public override GGPOErrorCode SetDisconnectTimeout(uint timeout) {
+		public override ErrorCode SetDisconnectTimeout(uint timeout) {
 			_disconnect_timeout = timeout;
 			for (int i = 0; i < _num_players; i++) {
 				if (_endpoints[i].IsInitialized()) {
@@ -316,17 +316,17 @@ namespace GGPort {
 				}
 			}
 			
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
-		public override GGPOErrorCode SetDisconnectNotifyStart(uint timeout) {
+		public override ErrorCode SetDisconnectNotifyStart(uint timeout) {
 			_disconnect_notify_start = timeout;
 			for (int i = 0; i < _num_players; i++) {
 				if (_endpoints[i].IsInitialized()) {
 					_endpoints[i].SetDisconnectNotifyStart(_disconnect_notify_start);
 				}
 			}
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
 		public virtual void OnMsg(IPEndPoint from, ref UDPMessage msg, int len) {
@@ -344,15 +344,15 @@ namespace GGPort {
 			}
 		}
 
-		protected GGPOErrorCode PlayerHandleToQueue(GGPOPlayerHandle player, out int queue) {
-			int offset = player.handleValue - 1;
+		protected ErrorCode PlayerHandleToQueue(GGPOPlayerHandle player, out int queue) {
+			int offset = player.HandleValue - 1;
 			if (offset < 0 || offset >= _num_players) {
 				queue = -1;
-				return GGPOErrorCode.GGPO_ERRORCODE_INVALID_PLAYER_HANDLE;
+				return ErrorCode.InvalidPlayerHandle;
 			}
 			
 			queue = offset;
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 		
 		protected GGPOPlayerHandle QueueToPlayerHandle(int queue) { return new GGPOPlayerHandle(queue + 1); }
@@ -366,25 +366,25 @@ namespace GGPort {
 
 			_endpoints[queue].Disconnect();
 
-			Log($"Changing queue {queue} local connect status for last frame from {_local_connect_status[queue].last_frame} to {syncto} on disconnect request (current: {framecount}).\n");
+			Log($"Changing queue {queue} local connect status for last frame from {_local_connect_status[queue].LastFrame} to {syncto} on disconnect request (current: {framecount}).{Environment.NewLine}");
 
-			_local_connect_status[queue].disconnected = true;
-			_local_connect_status[queue].last_frame = syncto;
+			_local_connect_status[queue].IsDisconnected = true;
+			_local_connect_status[queue].LastFrame = syncto;
 
 			if (syncto < framecount) {
-				Log($"adjusting simulation to account for the fact that {queue} disconnected @ {syncto}.\n");
+				Log($"adjusting simulation to account for the fact that {queue} disconnected @ {syncto}.{Environment.NewLine}");
 				_sync.AdjustSimulation(syncto);
-				Log("finished adjusting simulation.\n");
+				Log($"finished adjusting simulation.{Environment.NewLine}");
 			}
 
 			GGPOEvent info = new GGPOEvent {
-				code = GGPOEventCode.GGPO_EVENTCODE_DISCONNECTED_FROM_PEER,
+				code = GGPOEventCode.DisconnectedFromPeer,
 				disconnected = {
 					player = QueueToPlayerHandle(queue)
 				}
 			};
 			
-			_callbacks.on_event(ref info);
+			_callbacks.OnEvent(ref info);
 
 			CheckInitialSync();
 		}
@@ -415,7 +415,7 @@ namespace GGPort {
 				// go ahead and tell the client that we're ok to accept input.
 				for (int i = 0; i < _num_players; i++) {
 					// xxx: IsInitialized() must go... we're actually using it as a proxy for "represents the local player"
-					if (_endpoints[i].IsInitialized() && !_endpoints[i].IsSynchronized() && !_local_connect_status[i].disconnected) {
+					if (_endpoints[i].IsInitialized() && !_endpoints[i].IsSynchronized() && !_local_connect_status[i].IsDisconnected) {
 						return;
 					}
 				}
@@ -427,10 +427,10 @@ namespace GGPort {
 				}
 
 				GGPOEvent info = new GGPOEvent {
-					code = GGPOEventCode.GGPO_EVENTCODE_RUNNING
+					code = GGPOEventCode.Running
 				};
 				
-				_callbacks.on_event(ref info);
+				_callbacks.OnEvent(ref info);
 				_synchronizing = false;
 			}
 		}
@@ -447,17 +447,17 @@ namespace GGPort {
 					queue_connected = _endpoints[i].GetPeerConnectStatus(i, out int ignore);
 				}
 				
-				if (!_local_connect_status[i].disconnected) {
-					total_min_confirmed = Math.Min(_local_connect_status[i].last_frame, total_min_confirmed);
+				if (!_local_connect_status[i].IsDisconnected) {
+					total_min_confirmed = Math.Min(_local_connect_status[i].LastFrame, total_min_confirmed);
 				}
 				
-				Log($"  local endp: connected = {!_local_connect_status[i].disconnected}, last_received = {_local_connect_status[i].last_frame}, total_min_confirmed = {total_min_confirmed}.\n");
-				if (!queue_connected && !_local_connect_status[i].disconnected) {
-					Log($"disconnecting i {i} by remote request.\n");
+				Log($"  local endp: connected = {!_local_connect_status[i].IsDisconnected}, last_received = {_local_connect_status[i].LastFrame}, total_min_confirmed = {total_min_confirmed}.{Environment.NewLine}");
+				if (!queue_connected && !_local_connect_status[i].IsDisconnected) {
+					Log($"disconnecting i {i} by remote request.{Environment.NewLine}");
 					DisconnectPlayerQueue(i, total_min_confirmed);
 				}
 				
-				Log($"  total_min_confirmed = {total_min_confirmed}.\n");
+				Log($"  total_min_confirmed = {total_min_confirmed}.{Environment.NewLine}");
 			}
 			
 			return total_min_confirmed;
@@ -471,7 +471,7 @@ namespace GGPort {
 			for (queue = 0; queue < _num_players; queue++) {
 				bool queue_connected = true;
 				int queue_min_confirmed = int.MaxValue;
-				Log($"considering queue {queue}.\n");
+				Log($"considering queue {queue}.{Environment.NewLine}");
 
 				for (int i = 0; i < _num_players; i++) {
 					// we're going to do a lot of logic here in consideration of endpoint i.
@@ -482,18 +482,18 @@ namespace GGPort {
 
 						queue_connected = queue_connected && connected;
 						queue_min_confirmed = Math.Min(last_received, queue_min_confirmed);
-						Log($"  endpoint {i}: connected = {connected}, last_received = {last_received}, queue_min_confirmed = {queue_min_confirmed}.\n");
+						Log($"  endpoint {i}: connected = {connected}, last_received = {last_received}, queue_min_confirmed = {queue_min_confirmed}.{Environment.NewLine}");
 					} else {
-						Log($"  endpoint {i}: ignoring... not running.\n");
+						Log($"  endpoint {i}: ignoring... not running.{Environment.NewLine}");
 					}
 				}
 				
 				// merge in our local status only if we're still connected!
-				if (!_local_connect_status[queue].disconnected) {
-					queue_min_confirmed = Math.Min(_local_connect_status[queue].last_frame, queue_min_confirmed);
+				if (!_local_connect_status[queue].IsDisconnected) {
+					queue_min_confirmed = Math.Min(_local_connect_status[queue].LastFrame, queue_min_confirmed);
 				}
 				
-				Log($"  local endp: connected = {!_local_connect_status[queue].disconnected}, last_received = {_local_connect_status[queue].last_frame}, queue_min_confirmed = {queue_min_confirmed}.\n");
+				Log($"  local endp: connected = {!_local_connect_status[queue].IsDisconnected}, last_received = {_local_connect_status[queue].LastFrame}, queue_min_confirmed = {queue_min_confirmed}.{Environment.NewLine}");
 
 				if (queue_connected) {
 					total_min_confirmed = Math.Min(queue_min_confirmed, total_min_confirmed);
@@ -501,12 +501,12 @@ namespace GGPort {
 					// check to see if this disconnect notification is further back than we've been before.  If
 					// so, we need to re-adjust.  This can happen when we detect our own disconnect at frame n
 					// and later receive a disconnect notification for frame n-1.
-					if (!_local_connect_status[queue].disconnected || _local_connect_status[queue].last_frame > queue_min_confirmed) {
-						Log($"disconnecting queue {queue} by remote request.\n");
+					if (!_local_connect_status[queue].IsDisconnected || _local_connect_status[queue].LastFrame > queue_min_confirmed) {
+						Log($"disconnecting queue {queue} by remote request.{Environment.NewLine}");
 						DisconnectPlayerQueue(queue, queue_min_confirmed);
 					}
 				}
-				Log($"  total_min_confirmed = {total_min_confirmed}.\n");
+				Log($"  total_min_confirmed = {total_min_confirmed}.{Environment.NewLine}");
 			}
 			
 			return total_min_confirmed;
@@ -522,14 +522,14 @@ namespace GGPort {
 			_endpoints[queue].Synchronize();
 		}
 
-		protected GGPOErrorCode AddSpectator(IPEndPoint remoteEndPoint) {
-			if (_num_spectators == Globals.GGPO_MAX_SPECTATORS) {
-				return GGPOErrorCode.GGPO_ERRORCODE_TOO_MANY_SPECTATORS;
+		protected ErrorCode AddSpectator(IPEndPoint remoteEndPoint) {
+			if (_num_spectators == Types.kMaxSpectators) {
+				return ErrorCode.TooManySpectators;
 			}
 			
 			// Currently, we can only add spectators before the game starts.
 			if (!_synchronizing) {
-				return GGPOErrorCode.GGPO_ERRORCODE_INVALID_REQUEST;
+				return ErrorCode.InvalidRequest;
 			}
 			int queue = _num_spectators++;
 
@@ -538,7 +538,7 @@ namespace GGPort {
 			_spectators[queue].SetDisconnectNotifyStart(_disconnect_notify_start);
 			_spectators[queue].Synchronize();
 
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 		
 		protected virtual void OnSyncEvent(ref Sync.Event e) { }
@@ -547,35 +547,35 @@ namespace GGPort {
 			switch (evt.type) {
 				case UDPProtocol.Event.Type.Connected: {
 					GGPOEvent info = new GGPOEvent {
-						code = GGPOEventCode.GGPO_EVENTCODE_CONNECTED_TO_PEER,
+						code = GGPOEventCode.ConnectedToPeer,
 						connected = {
 							player = handle
 						}
 					};
 					
-					_callbacks.on_event(ref info);
+					_callbacks.OnEvent(ref info);
 					break;
 				}
 				case UDPProtocol.Event.Type.Synchronizing: {
 					GGPOEvent info = new GGPOEvent {
-						code = GGPOEventCode.GGPO_EVENTCODE_SYNCHRONIZING_WITH_PEER,
+						code = GGPOEventCode.SynchronizingWithPeer,
 						synchronizing = {
 							player = handle, count = evt.synchronizing.count, total = evt.synchronizing.total
 						}
 					};
 					
-					_callbacks.on_event(ref info);
+					_callbacks.OnEvent(ref info);
 					break;
 				}
 				case UDPProtocol.Event.Type.Synchronized: {
 					GGPOEvent info = new GGPOEvent {
-						code = GGPOEventCode.GGPO_EVENTCODE_SYNCHRONIZED_WITH_PEER,
+						code = GGPOEventCode.SynchronizedWithPeer,
 						synchronized = {
 							player = handle
 						}
 					};
 					 
-					_callbacks.on_event(ref info);
+					_callbacks.OnEvent(ref info);
 
 					CheckInitialSync();
 					break;
@@ -583,25 +583,25 @@ namespace GGPort {
 
 				case UDPProtocol.Event.Type.NetworkInterrupted: {
 					GGPOEvent info = new GGPOEvent {
-						code = GGPOEventCode.GGPO_EVENTCODE_CONNECTION_INTERRUPTED,
-						connection_interrupted = {
+						code = GGPOEventCode.ConnectionInterrupted,
+						connectionInterrupted = {
 							player = handle, disconnect_timeout = evt.network_interrupted.disconnect_timeout
 						}
 					};
 					
-					_callbacks.on_event(ref info);
+					_callbacks.OnEvent(ref info);
 					break;
 				}
 
 				case UDPProtocol.Event.Type.NetworkResumed: {
 					GGPOEvent info = new GGPOEvent {
-						code = GGPOEventCode.GGPO_EVENTCODE_CONNECTION_RESUMED,
-						connection_resumed = {
+						code = GGPOEventCode.ConnectionResumed,
+						connectionResumed = {
 							player = handle
 						}
 					};
 					
-					_callbacks.on_event(ref info);
+					_callbacks.OnEvent(ref info);
 					break;
 				}
 			}
@@ -611,8 +611,8 @@ namespace GGPort {
 			OnUdpProtocolEvent(ref evt, QueueToPlayerHandle(queue));
 			switch (evt.type) {
 				case UDPProtocol.Event.Type.Input:
-					if (!_local_connect_status[queue].disconnected) {
-						int current_remote_frame = _local_connect_status[queue].last_frame;
+					if (!_local_connect_status[queue].IsDisconnected) {
+						int current_remote_frame = _local_connect_status[queue].LastFrame;
 						int new_remote_frame = evt.input.input.frame;
 						
 						if (current_remote_frame != -1 && new_remote_frame != current_remote_frame + 1) {
@@ -621,8 +621,8 @@ namespace GGPort {
 
 						_sync.AddRemoteInput(queue, ref evt.input.input);
 						// Notify the other endpoints which frame we received from a peer
-						Log($"setting remote connect status for queue {queue} to {evt.input.input.frame}\n");
-						_local_connect_status[queue].last_frame = evt.input.input.frame;
+						Log($"setting remote connect status for queue {queue} to {evt.input.input.frame}{Environment.NewLine}");
+						_local_connect_status[queue].LastFrame = evt.input.input.frame;
 					}
 					break;
 
@@ -641,13 +641,13 @@ namespace GGPort {
 					_spectators[queue].Disconnect();
 
 					GGPOEvent info = new GGPOEvent {
-						code = GGPOEventCode.GGPO_EVENTCODE_DISCONNECTED_FROM_PEER,
+						code = GGPOEventCode.DisconnectedFromPeer,
 						disconnected = {
 							player = handle
 						}
 					};
 					
-					_callbacks.on_event(ref info);
+					_callbacks.OnEvent(ref info);
 
 					break;
 			}

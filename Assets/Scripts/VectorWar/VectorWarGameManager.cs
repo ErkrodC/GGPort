@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Net;
 using GGPort;
 using TMPro;
@@ -14,8 +15,10 @@ namespace VectorWar {
 		[SerializeField] private TMP_InputField numPlayersText;
 		[SerializeField] private Toggle spectateModeToggle;
 		[SerializeField] private IPInputField hostIPText;
-		[SerializeField] private PlayerConf[] playerConfs;
+		[SerializeField] private Transform playerConfsContainer;
+		[SerializeField] private GameObject playerConfPrefab;
 		[SerializeField] private Button startButton;
+		private List<PlayerConf> playerConfs = new List<PlayerConf>();
 
 		private long start;
 		private long next;
@@ -43,11 +46,17 @@ namespace VectorWar {
 			
 			hostIPText.gameObject.SetActive(spectateModeToggle.isOn);
 			spectateModeToggle.onValueChanged.AddListener(hostIPText.gameObject.SetActive);
+			
+			numPlayersText.onValueChanged.AddListener(PopulatePlayerConfContainer);
+			PopulatePlayerConfContainer(numPlayersText.text);
 
 			foreach (PlayerConf playerConf in playerConfs) {
 				playerConf.gameObject.SetActive(!spectateModeToggle.isOn);
-				spectateModeToggle.onValueChanged.AddListener((value) => playerConf.gameObject.SetActive(!value));
+				spectateModeToggle.onValueChanged.AddListener(isOn => playerConf.gameObject.SetActive(!isOn));
 			}
+
+			hostIPText.gameObject.SetActive(spectateModeToggle.isOn);
+			spectateModeToggle.onValueChanged.AddListener(hostIPText.gameObject.SetActive);
 		}
 
 		private void Update() {
@@ -76,8 +85,6 @@ namespace VectorWar {
 		}
 
 		private void OnStartButton() {
-			int remotePlayerIndex = 0;
-
 			ushort localPort = ushort.Parse(localPortText.text);
 			int numPlayers = int.Parse(numPlayersText.text);
 
@@ -85,34 +92,38 @@ namespace VectorWar {
 				IPEndPoint hostEndPoint = hostIPText.GetIPEndPoint();
 				Globals.VectorWar_InitSpectator(localPort, numPlayers, hostEndPoint);
 			} else {
-				GGPOPlayer[] players = new GGPOPlayer[GGPort.Globals.GGPO_MAX_SPECTATORS + GGPort.Globals.GGPO_MAX_PLAYERS];
+				GGPOPlayer[] players = new GGPOPlayer[GGPort.Types.kMaxSpectators + GGPort.Types.kMaxPlayers];
 
-				int i;
-				for (i = 0; i < numPlayers - 1; i++) {
-					players[i].size = players[i].Size(); // TODO for what is size used?
-					players[i].player_num = i + 1;
+				int playerIndex;
+				for (playerIndex = 0; playerIndex < numPlayers; playerIndex++) {
+					players[playerIndex].Size = players[playerIndex].CalculateSize(); // TODO for what is size used?
+					players[playerIndex].PlayerNum = playerIndex + 1;
 
-					PlayerConf playerConf = playerConfs[remotePlayerIndex];
-					remotePlayerIndex++;
+					PlayerConf playerConf = playerConfs[playerIndex];
+					
 					if (playerConf.IsLocal()) {
-						players[i].type = GGPOPlayerType.GGPO_PLAYERTYPE_LOCAL;
-						continue;
+						players[playerIndex].Type = GGPOPlayerType.Local;
+					} else {
+						players[playerIndex].Type = GGPOPlayerType.Remote;
+						players[playerIndex].EndPoint = playerConf.GetIPEndPoint();
 					}
-
-					players[i].type = GGPOPlayerType.GGPO_PLAYERTYPE_REMOTE;
-					players[i].remote = playerConf.GetIPEndPoint();
 				}
 
-				// these are spectators...
+				// TODO allow adding spectators
+				/*// these are spectators...
 				int numSpectators = 0;
-				while (remotePlayerIndex < playerConfs.Length) {
-					players[i].type = GGPOPlayerType.GGPO_PLAYERTYPE_SPECTATOR;
-					players[i].remote = playerConfs[remotePlayerIndex++].GetIPEndPoint();
-					i++;
+				for (int spectatorIndex = playerIndex; spectatorIndex < numPlayers; spectatorIndex++, numSpectators++) {
+					players[spectatorIndex].type = GGPOPlayerType.GGPO_PLAYERTYPE_SPECTATOR;
+					players[spectatorIndex].remote = playerConfs[spectatorIndex].GetIPEndPoint();
+				}*/
+				
+				/*while (playerIndex < playerConfs.Count) {
+					
+					playerIndex++;
 					numSpectators++;
-				}
+				}*/
 
-				Globals.VectorWar_Init(localPort, numPlayers, players, numSpectators);
+				Globals.VectorWar_Init(localPort, numPlayers, players, 0/*numSpectators*/);
 			}
 
 			start = Platform.GetCurrentTimeMS();
@@ -120,6 +131,34 @@ namespace VectorWar {
 			now = start;
 
 			started = true;
+		}
+
+		private void PopulatePlayerConfContainer(string text) {
+			if (int.TryParse(text, out int numPlayers)) {
+				const int playerConfLimit = GGPort.Types.kMaxPlayers;
+				if (numPlayers > playerConfLimit) {
+					numPlayersText.text = playerConfLimit.ToString();
+					return;
+				}
+				
+				int currentNumConfs = playerConfsContainer.childCount;
+
+				if (numPlayers > currentNumConfs) {
+					for (int i = currentNumConfs; i < numPlayers; i++) {
+						PlayerConf newPlayerConf = Instantiate(playerConfPrefab, playerConfsContainer).GetComponent<PlayerConf>();
+						spectateModeToggle.onValueChanged.AddListener(isOn => newPlayerConf.gameObject.SetActive(!isOn));
+						playerConfs.Add(newPlayerConf);
+					}
+				} else if (numPlayers < currentNumConfs) {
+					for (int i = numPlayers; i < currentNumConfs; i++) {
+						playerConfs[i].gameObject.SetActive(false);
+					}
+				}
+
+				for (int i = 0; i < numPlayers; i++) {
+					playerConfs[i].gameObject.SetActive(!spectateModeToggle.isOn);
+				}
+			}
 		}
 	}
 }

@@ -2,31 +2,31 @@
 using System.Runtime.InteropServices;
 
 namespace GGPort {
-	public static class Globals { // TODO rename?
-		public const int GGPO_MAX_PLAYERS = 4;
-		public const int GGPO_MAX_PREDICTION_FRAMES = 8;
-		public const int GGPO_MAX_SPECTATORS = 32;
-		public const int GGPO_SPECTATOR_INPUT_INTERVAL = 4;
+	public static class Types {
+		public const int kMaxPlayers = 4;
+		public const int kMaxPreditionFrames = 8;
+		public const int kMaxSpectators = 32;
+		public const int kSpectatorInputInterval = 4;
 
-		public static bool GGPO_SUCCEEDED(GGPOErrorCode result) { // TODO rename
-			return result == GGPOErrorCode.GGPO_ERRORCODE_SUCCESS;
+		public static bool GGPOSucceeded(ErrorCode result) {
+			return result == ErrorCode.Success;
 		}
 	}
 
 	public struct GGPOPlayerHandle {
-		public const int GGPO_INVALID_HANDLE = -1;
+		public const int kInvalidHandle = -1;
 		
-		public readonly int handleValue;
+		public readonly int HandleValue;
 
 		public GGPOPlayerHandle(int handleValue) {
-			this.handleValue = handleValue;
+			HandleValue = handleValue;
 		}
 	}
 
 	public enum GGPOPlayerType {
-		GGPO_PLAYERTYPE_LOCAL,
-		GGPO_PLAYERTYPE_REMOTE,
-		GGPO_PLAYERTYPE_SPECTATOR
+		Local,
+		Remote,
+		Spectator
 	}
 
 	/*
@@ -54,44 +54,36 @@ namespace GGPort {
 	*/
 
 	public struct GGPOPlayer {
-		public int size;
-		public GGPOPlayerType type;
-		public int player_num;
-		public IPEndPoint remote;
+		public int Size;
+		public GGPOPlayerType Type;
+		public int PlayerNum;
+		public IPEndPoint EndPoint;
 
-		public int Size() {
+		public int CalculateSize() {
 			int siz = sizeof(int);
 			siz += sizeof(GGPOPlayerType);
 			siz += sizeof(int);
-			siz += type == GGPOPlayerType.GGPO_PLAYERTYPE_LOCAL ? 0 : remote.Address.GetAddressBytes().Length;
+			siz += Type == GGPOPlayerType.Local ? 0 : EndPoint.Address.GetAddressBytes().Length;
 			siz += sizeof(int);
 
 			return siz;
 		}
-
-		public struct Local { }
 	}
 
-	public struct GGPOLocalEndpoint {
-		public readonly int player_num;
-	}
-
-	// TODO clean up enum val names
-	public enum GGPOErrorCode {
-		GGPO_OK = 0,
-		GGPO_ERRORCODE_SUCCESS = 0,
-		GGPO_ERRORCODE_GENERAL_FAILURE = -1,
-		GGPO_ERRORCODE_INVALID_SESSION = 1,
-		GGPO_ERRORCODE_INVALID_PLAYER_HANDLE = 2,
-		GGPO_ERRORCODE_PLAYER_OUT_OF_RANGE = 3,
-		GGPO_ERRORCODE_PREDICTION_THRESHOLD = 4,
-		GGPO_ERRORCODE_UNSUPPORTED = 5,
-		GGPO_ERRORCODE_NOT_SYNCHRONIZED = 6,
-		GGPO_ERRORCODE_IN_ROLLBACK = 7,
-		GGPO_ERRORCODE_INPUT_DROPPED = 8,
-		GGPO_ERRORCODE_PLAYER_DISCONNECTED = 9,
-		GGPO_ERRORCODE_TOO_MANY_SPECTATORS = 10,
-		GGPO_ERRORCODE_INVALID_REQUEST = 11
+	public enum ErrorCode {
+		Success = 0,
+		GeneralFailure = -1,
+		InvalidSession = 1,
+		InvalidPlayerHandle = 2,
+		PlayerOutOfRange = 3,
+		PredictionThreshold = 4,
+		Unsupported = 5,
+		NotSynchronized = 6,
+		InRollback = 7,
+		InputDropped = 8,
+		PlayerDisconnected = 9,
+		TooManySpectators = 10,
+		InvalidRequest = 11
 	}
 
 	/*
@@ -121,14 +113,14 @@ namespace GGPort {
 	*
 	*/
 	public enum GGPOEventCode {
-		GGPO_EVENTCODE_CONNECTED_TO_PEER = 1000,
-		GGPO_EVENTCODE_SYNCHRONIZING_WITH_PEER = 1001,
-		GGPO_EVENTCODE_SYNCHRONIZED_WITH_PEER = 1002,
-		GGPO_EVENTCODE_RUNNING = 1003,
-		GGPO_EVENTCODE_DISCONNECTED_FROM_PEER = 1004,
-		GGPO_EVENTCODE_TIMESYNC = 1005,
-		GGPO_EVENTCODE_CONNECTION_INTERRUPTED = 1006,
-		GGPO_EVENTCODE_CONNECTION_RESUMED = 1007
+		ConnectedToPeer = 1000,
+		SynchronizingWithPeer = 1001,
+		SynchronizedWithPeer = 1002,
+		Running = 1003,
+		DisconnectedFromPeer = 1004,
+		TimeSync = 1005,
+		ConnectionInterrupted = 1006,
+		ConnectionResumed = 1007
 	}
 
 	/*
@@ -140,14 +132,13 @@ namespace GGPort {
 	public struct GGPOEvent {
 		[FieldOffset(0)] public GGPOEventCode code;
 
-		// connect, synchronizing, synchronized, disconnected, connection_interrupted, connection_resumed
 		[FieldOffset(4)] public Connected connected;
 		[FieldOffset(4)] public Synchronizing synchronizing;
 		[FieldOffset(4)] public Synchronized synchronized;
 		[FieldOffset(4)] public Disconnected disconnected;
-		[FieldOffset(4)] public TimeSync timesync;
-		[FieldOffset(4)] public ConnectionInterrupted connection_interrupted;
-		[FieldOffset(4)] public ConnectionResumed connection_resumed;
+		[FieldOffset(4)] public TimeSync timeSync;
+		[FieldOffset(4)] public ConnectionInterrupted connectionInterrupted;
+		[FieldOffset(4)] public ConnectionResumed connectionResumed;
 
 		public struct Connected {
 			public GGPOPlayerHandle player { get; set; }
@@ -168,7 +159,7 @@ namespace GGPort {
 		}
 
 		public struct TimeSync {
-			public int frames_ahead { get; set; }
+			public int framesAhead { get; set; }
 		}
 
 		public struct ConnectionInterrupted {
@@ -190,14 +181,14 @@ namespace GGPort {
 	* your application must implement.  GGPO.net will periodically call these
 	* functions during the game.  All callback functions must be implemented.
 	*/
-	public struct GGPOSessionCallbacks {
+	public struct SessionCallbacks {
 		/*
 		* begin_game callback - This callback has been deprecated.  You must
 		* implement it, but should ignore the 'game' parameter.
 		*/
 		public delegate bool BeginGameDelegate(string game);
 
-		public BeginGameDelegate begin_game { get; set; }
+		public BeginGameDelegate BeginGame { get; set; }
 
 		/*
 		* save_game_state - The client should allocate a buffer, copy the
@@ -207,7 +198,7 @@ namespace GGPort {
 		*/
 		public delegate bool SaveGameStateDelegate(ref byte[] buffer, ref int len, ref int checksum, int frame);
 
-		public SaveGameStateDelegate save_game_state { get; set; }
+		public SaveGameStateDelegate SaveGameState { get; set; }
 
 		/*
 		* load_game_state - GGPO.net will call this function at the beginning
@@ -218,7 +209,7 @@ namespace GGPort {
 		*/
 		public delegate bool LoadGameStateDelegate(byte[] buffer);
 
-		public LoadGameStateDelegate load_game_state { get; set; }
+		public LoadGameStateDelegate LoadGameState { get; set; }
 
 		/*
 		* log_game_state - Used in diagnostic testing.  The client should use
@@ -227,7 +218,7 @@ namespace GGPort {
 		*/
 		public delegate bool LogGameStateDelegate(string filename, byte[] buffer, int len);
 
-		public LogGameStateDelegate log_game_state { get; set; }
+		public LogGameStateDelegate LogGameState { get; set; }
 
 		/*
 		* free_buffer - Frees a game state allocated in save_game_state.  You
@@ -235,7 +226,7 @@ namespace GGPort {
 		*/
 		public delegate void FreeBufferDelegate(byte[] buffer);
 
-		public FreeBufferDelegate free_buffer { get; set; }
+		public FreeBufferDelegate FreeBuffer { get; set; }
 
 		/*
 		* advance_frame - Called during a rollback.  You should advance your game
@@ -248,7 +239,7 @@ namespace GGPort {
 		*/
 		public delegate bool AdvanceFrameDelegate(int flags);
 
-		public AdvanceFrameDelegate advance_frame { get; set; }
+		public AdvanceFrameDelegate AdvanceFrame { get; set; }
 
 		/* 
 		* on_event - Notification that something has happened.  See the GGPOEventCode
@@ -256,7 +247,7 @@ namespace GGPort {
 		*/
 		public delegate bool OnEventDelegate(ref GGPOEvent info);
 
-		public OnEventDelegate on_event { get; set; }
+		public OnEventDelegate OnEvent { get; set; }
 	}
 
 	/*
@@ -295,18 +286,18 @@ namespace GGPort {
 	*/
 	public struct GGPONetworkStats {
 		public Network network;
-		public TimeSync timesync;
+		public TimeSync timeSync;
 
 		public struct Network {
-			public int send_queue_len { get; set; }
-			public readonly int recv_queue_len;
-			public int ping { get; set; }
-			public int kbps_sent { get; set; }
+			public int SendQueueLength { get; set; }
+			public readonly int ReceiveQueueLength;
+			public int Ping { get; set; }
+			public int KbpsSent { get; set; }
 		}
 
 		public struct TimeSync {
-			public int local_frames_behind { get; set; }
-			public int remote_frames_behind { get; set; }
+			public int LocalFramesBehind { get; set; }
+			public int RemoteFramesBehind { get; set; }
 		}
 	}
 }

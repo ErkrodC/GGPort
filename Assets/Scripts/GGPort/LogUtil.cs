@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Text;
 
 namespace GGPort {
 	public static class LogUtil {
@@ -21,9 +22,8 @@ namespace GGPort {
 		}
 
 		public static void Log(FileStream fp, string msg) {
-			char[] msgCharArray;
-			byte[] buf;
-			
+			string toWrite = "";
+
 			if (Platform.GetConfigBool("ggpo.log.timestamps")) {
 				long t = 0;
 				if (start == 0) {
@@ -32,17 +32,13 @@ namespace GGPort {
 					t = Platform.GetCurrentTimeMS() - start;
 				}
 				
-				msgCharArray = $"{t / 1000}.{t % 1000:000} : ".ToCharArray();
-				buf = new byte[msgCharArray.Length];
-				Buffer.BlockCopy(msgCharArray, 0, buf, 0, msgCharArray.Length);
-				fp.Write(buf, 0, msgCharArray.Length);
+				toWrite = $"[{t / 1000}.{t % 1000:000}] : ";
 			}
 
-			msgCharArray = msg.ToCharArray();
-			buf = new byte[msgCharArray.Length];
-			Buffer.BlockCopy(msgCharArray, 0, buf, 0, msgCharArray.Length);
+			toWrite += msg;
+			byte[] buffer = Encoding.UTF8.GetBytes(toWrite);
 
-			fp.Write(buf, 0, msgCharArray.Length);
+			fp.Write(buffer, 0, buffer.Length);
 			fp.Flush();
 
 			logbuf = msg;

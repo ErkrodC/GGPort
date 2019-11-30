@@ -2,7 +2,7 @@
 using System.Net;
 
 namespace GGPort {
-	public static class GGPortMain {
+	public static class SessionInterface {
 		public static Random Random;
 		
 		public static bool Main() {
@@ -33,9 +33,9 @@ namespace GGPort {
 		*
 		* local_port - The port GGPO should bind to for UDP traffic.
 		*/
-		public static GGPOErrorCode ggpo_start_session(out GGPOSession session, ref GGPOSessionCallbacks cb, string game, int num_players, int input_size, ushort localport) {
+		public static ErrorCode ggpo_start_session(out GGPOSession session, ref SessionCallbacks cb, string game, int num_players, int input_size, ushort localport) {
 			session = new PeerToPeerBackend(ref cb, game, localport, num_players, input_size);
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
 
@@ -50,9 +50,9 @@ namespace GGPort {
 		* handle - An out parameter to a handle used to identify this player in the future.
 		* (e.g. in the on_event callbacks).
 		*/
-		public static GGPOErrorCode ggpo_add_player(ref GGPOSession ggpo, ref GGPOPlayer player, out GGPOPlayerHandle handle) {
+		public static ErrorCode ggpo_add_player(ref GGPOSession ggpo, ref GGPOPlayer player, out GGPOPlayerHandle handle) {
 			handle = new GGPOPlayerHandle(-1);
-			return ggpo?.AddPlayer(ref player, out handle) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
+			return ggpo?.AddPlayer(ref player, out handle) ?? ErrorCode.InvalidSession;
 		}
 
 		/*
@@ -79,16 +79,16 @@ namespace GGPort {
 		* recommended value is 1.
 		*
 		*/
-		public static GGPOErrorCode ggpo_start_synctest(
+		public static ErrorCode ggpo_start_synctest(
 			ref GGPOSession ggpo,
-			ref GGPOSessionCallbacks cb,
+			ref SessionCallbacks cb,
 			string game,
 			int num_players,
 			int input_size,
 			int frames
 		) {
 			ggpo = new SyncTestBackend(ref cb, game, frames, num_players);
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
 		/*
@@ -115,16 +115,16 @@ namespace GGPort {
 		*
 		* host_port - The port of the session on the host
 		*/
-		public static GGPOErrorCode ggpo_start_spectating(
+		public static ErrorCode ggpo_start_spectating(
 			ref GGPOSession session,
-			ref GGPOSessionCallbacks cb,
+			ref SessionCallbacks cb,
 			string game,
 			int num_players,
 			int input_size,
 			ushort local_port,
 			IPEndPoint hostEndPoint
 		) {
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
 		/*
@@ -132,13 +132,13 @@ namespace GGPort {
 		* Used to close a session.  You must call ggpo_close_session to
 		* free the resources allocated in ggpo_start_session.
 		*/
-		public static GGPOErrorCode ggpo_close_session(ref GGPOSession ggpo) {
+		public static ErrorCode ggpo_close_session(ref GGPOSession ggpo) {
 			if (ggpo == null) {
-				return GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
+				return ErrorCode.InvalidSession;
 			}
 
 			ggpo = null;
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
 		/*
@@ -147,12 +147,12 @@ namespace GGPort {
 		* Change the amount of frames ggpo will delay local input.  Must be called
 		* before the first call to ggpo_synchronize_input.
 		*/
-		public static GGPOErrorCode ggpo_set_frame_delay(
+		public static ErrorCode ggpo_set_frame_delay(
 			ref GGPOSession ggpo,
 			GGPOPlayerHandle player,
 			int frame_delay
 		) {
-			return ggpo?.SetFrameDelay(player, frame_delay) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
+			return ggpo?.SetFrameDelay(player, frame_delay) ?? ErrorCode.InvalidSession;
 		}
 
 		/*
@@ -164,8 +164,8 @@ namespace GGPort {
 		* timeout - The amount of time GGPO.net is allowed to spend in this function,
 		* in milliseconds.
 		*/
-		public static GGPOErrorCode ggpo_idle(ref GGPOSession ggpo, int timeout) {
-			return ggpo?.DoPoll(timeout) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
+		public static ErrorCode ggpo_idle(ref GGPOSession ggpo, int timeout) {
+			return ggpo?.DoPoll(timeout) ?? ErrorCode.InvalidSession;
 		}
 
 		/*
@@ -183,13 +183,11 @@ namespace GGPort {
 		* size - The size of the controller inputs.  This must be exactly equal to the
 		* size passed into ggpo_start_session.
 		*/
-		public static GGPOErrorCode ggpo_add_local_input(
-			ref GGPOSession ggpo,
+		public static ErrorCode ggpo_add_local_input(ref GGPOSession ggpo,
 			GGPOPlayerHandle player,
-			object value,
-			int size
-		) {
-			return ggpo?.AddLocalInput(player, value, size) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
+			byte[] value,
+			int size) {
+			return ggpo?.AddLocalInput(player, value, size) ?? ErrorCode.InvalidSession;
 		}
 
 		/*
@@ -209,13 +207,13 @@ namespace GGPort {
 		* that player will be zeroed and the i-th flag will be set.  For example,
 		* if only player 3 has disconnected, disconnect flags will be 8 (i.e. 1 << 3).
 		*/
-		public static GGPOErrorCode ggpo_synchronize_input(
+		public static ErrorCode ggpo_synchronize_input(
 			ref GGPOSession ggpo,
 			Array values,
 			int size,
 			int? disconnect_flags
 		) {
-			return ggpo?.SyncInput(ref values, size, ref disconnect_flags) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
+			return ggpo?.SyncInput(ref values, size, ref disconnect_flags) ?? ErrorCode.InvalidSession;
 		}
 
 		/*
@@ -224,8 +222,8 @@ namespace GGPort {
 		* Disconnects a remote player from a game.  Will return GGPO_ERRORCODE_PLAYER_DISCONNECTED
 		* if you try to disconnect a player who has already been disconnected.
 		*/
-		public static GGPOErrorCode ggpo_disconnect_player(ref GGPOSession ggpo, GGPOPlayerHandle player) {
-			return ggpo?.DisconnectPlayer(player) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
+		public static ErrorCode ggpo_disconnect_player(ref GGPOSession ggpo, GGPOPlayerHandle player) {
+			return ggpo?.DisconnectPlayer(player) ?? ErrorCode.InvalidSession;
 		}
 
 		/*
@@ -236,8 +234,8 @@ namespace GGPort {
 		* you advance the gamestate by a frame, even during rollbacks.  GGPO.net
 		* may call your save_state callback before this function returns.
 		*/
-		public static GGPOErrorCode ggpo_advance_frame(ref GGPOSession ggpo) {
-			return ggpo?.IncrementFrame() ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
+		public static ErrorCode ggpo_advance_frame(ref GGPOSession ggpo) {
+			return ggpo?.IncrementFrame() ?? ErrorCode.InvalidSession;
 		}
 
 		/*
@@ -250,13 +248,13 @@ namespace GGPort {
 		*
 		* stats - Out parameter to the network statistics.
 		*/
-		public static GGPOErrorCode ggpo_get_network_stats(
+		public static ErrorCode ggpo_get_network_stats(
 			ref GGPOSession ggpo,
 			GGPOPlayerHandle player,
 			out GGPONetworkStats stats
 		) {
 			stats = default;
-			return ggpo?.GetNetworkStats(out stats, player) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
+			return ggpo?.GetNetworkStats(out stats, player) ?? ErrorCode.InvalidSession;
 		}
 
 		/*
@@ -271,8 +269,8 @@ namespace GGPort {
 		*
 		* timeout - The time in milliseconds to wait before disconnecting a peer.
 		*/
-		public static GGPOErrorCode ggpo_set_disconnect_timeout(ref GGPOSession ggpo, uint timeout) {
-			return ggpo?.SetDisconnectTimeout(timeout) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
+		public static ErrorCode ggpo_set_disconnect_timeout(ref GGPOSession ggpo, uint timeout) {
+			return ggpo?.SetDisconnectTimeout(timeout) ?? ErrorCode.InvalidSession;
 		}
 
 		/*
@@ -284,8 +282,8 @@ namespace GGPort {
 		* timeout - The amount of time which needs to elapse without receiving a packet
 		*           before the GGPO_EVENTCODE_NETWORK_INTERRUPTED event is sent.
 		*/
-		public static GGPOErrorCode ggpo_set_disconnect_notify_start(ref GGPOSession ggpo, uint timeout) {
-			return ggpo?.SetDisconnectNotifyStart(timeout) ?? GGPOErrorCode.GGPO_ERRORCODE_INVALID_SESSION;
+		public static ErrorCode ggpo_set_disconnect_notify_start(ref GGPOSession ggpo, uint timeout) {
+			return ggpo?.SetDisconnectNotifyStart(timeout) ?? ErrorCode.InvalidSession;
 		}
 
 		/*

@@ -12,13 +12,13 @@ using System;
 
 namespace GGPort {
 	public unsafe struct GameInput {
-		public const int GAMEINPUT_MAX_BYTES = 9;
-		public const int GAMEINPUT_MAX_PLAYERS = 2;
-		public const int NullFrame = -1;
+		public const int kMaxBytes = 9;
+		public const int kMaxPlayers = 2;
+		public const int kNullFrame = -1;
 		
 		public int frame { get; set; }
 		public int size { get; set; } /* size in bytes of the entire input for all players */
-		public fixed byte bits[GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS];
+		public fixed byte bits[kMaxBytes * kMaxPlayers];
 
 		public bool is_null() {
 			return frame == -1;
@@ -29,14 +29,14 @@ namespace GGPort {
 				throw new ArgumentException();
 			}
 
-			if (isize > GAMEINPUT_MAX_BYTES) {
+			if (isize > kMaxBytes) {
 				throw new ArgumentException();
 			}
 			
 			frame = iframe;
 			size = isize;
 
-			const int sizeOfBits = GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS;
+			const int sizeOfBits = kMaxBytes * kMaxPlayers;
 			for (int i = 0; i < sizeOfBits; i++) {
 				bits[i] = 0;
 			}
@@ -54,14 +54,14 @@ namespace GGPort {
 				throw new ArgumentException();
 			}
 
-			if (isize > GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS) {
+			if (isize > kMaxBytes * kMaxPlayers) {
 				throw new ArgumentException();
 			}
 			
 			frame = iframe;
 			size = isize;
 
-			const int sizeOfBits = GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS;
+			const int sizeOfBits = kMaxBytes * kMaxPlayers;
 			for (int i = 0; i < sizeOfBits; i++) {
 				bits[i] = 0;
 			}
@@ -86,7 +86,7 @@ namespace GGPort {
 		}
 
 		public void erase() {
-			const int sizeOfBits = GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS;
+			const int sizeOfBits = kMaxBytes * kMaxPlayers;
 			for (int i = 0; i < sizeOfBits; i++) {
 				bits[i] = 0;
 			}
@@ -109,16 +109,16 @@ namespace GGPort {
 		}
 
 		public void log(string prefix, bool show_frame = true) {
-			LogUtil.Log($"{prefix}{desc(show_frame)}\n");
+			LogUtil.Log($"{prefix}{desc(show_frame)}{Environment.NewLine}");
 		}
 
 		public bool equal(ref GameInput other, bool bitsonly = false) {
 			if (!bitsonly && frame != other.frame) {
-				LogUtil.Log($"frames don't match: {frame}, {other.frame}\n");
+				LogUtil.Log($"frames don't match: {frame}, {other.frame}{Environment.NewLine}");
 			}
 			
 			if (size != other.size) {
-				LogUtil.Log($"sizes don't match: {size}, {other.size}\n");
+				LogUtil.Log($"sizes don't match: {size}, {other.size}{Environment.NewLine}");
 			}
 
 			bool bitsAreEqual = true;
@@ -131,7 +131,7 @@ namespace GGPort {
 			}
 			
 			if (!bitsAreEqual) {
-				LogUtil.Log($"bits don't match\n");
+				LogUtil.Log($"bits don't match{Environment.NewLine}");
 			}
 
 			if (size == 0 || other.size == 0) {

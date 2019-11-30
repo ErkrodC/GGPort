@@ -9,24 +9,38 @@ using System;
 
 namespace GGPort {
 	public class Sync {
-		public const int MAX_PREDICTION_FRAMES = 8;
+		public const int kMaxPredictionFrames = 8;
+		
+		protected SessionCallbacks Callbacks;
+		protected SavedState     savedState;
+		protected Config         config;
+		
+		protected bool           IsRollingBack;
+		protected int            LastConfirmedFrame;
+		protected int            FrameCount;
+		protected int            MaxPredictionFrames;
+		
+		protected InputQueue[]     InputQueues;
+
+		protected RingBuffer<Event> EventQueue = new RingBuffer<Event>(32);
+		protected UDPMessage.ConnectStatus[] LocalConnectStatuses;
 		
 		public struct Config {
-			public readonly GGPOSessionCallbacks callbacks;
-			public readonly int num_prediction_frames;
-			public readonly int num_players;
-			public readonly int input_size;
+			public readonly SessionCallbacks Callbacks;
+			public readonly int NumPredictionFrames;
+			public readonly int NumPlayers;
+			public readonly int InputSize;
 
-			public Config(GGPOSessionCallbacks callbacks, int numPredictionFrames) : this() {
-				this.callbacks = callbacks;
-				num_prediction_frames = numPredictionFrames;
+			public Config(SessionCallbacks callbacks, int numPredictionFrames) : this() {
+				Callbacks = callbacks;
+				NumPredictionFrames = numPredictionFrames;
 			}
 
-			public Config(GGPOSessionCallbacks callbacks, int numPredictionFrames, int numPlayers, int inputSize) {
-				this.callbacks = callbacks;
-				num_prediction_frames = numPredictionFrames;
-				num_players = numPlayers;
-				input_size = inputSize;
+			public Config(SessionCallbacks callbacks, int numPredictionFrames, int numPlayers, int inputSize) {
+				Callbacks = callbacks;
+				NumPredictionFrames = numPredictionFrames;
+				NumPlayers = numPlayers;
+				InputSize = inputSize;
 			}
 		};
 		
@@ -42,73 +56,73 @@ namespace GGPort {
 			}
 		}
 
-		public Sync(ref UDPMessage.connect_status[] connect_status) {
-			_local_connect_status = connect_status;
-			_input_queues = null;
-			_framecount = 0;
-			_last_confirmed_frame = -1;
-			_max_prediction_frames = 0;
-			_savedstate = default;
+		public Sync(ref UDPMessage.ConnectStatus[] localConnectStatuses) {
+			LocalConnectStatuses = localConnectStatuses;
+			InputQueues = null;
+			FrameCount = 0;
+			LastConfirmedFrame = -1;
+			MaxPredictionFrames = 0;
+			savedState = new SavedState(0);
 		}
 
 		~Sync() {
-			for (int i = 0; i < _savedstate.frames.Length; i++) {
-				_callbacks.free_buffer(_savedstate.frames[i].buf);
+			for (int i = 0; i < savedState.frames.Length; i++) {
+				Callbacks.FreeBuffer(savedState.frames[i].buf);
 			}
 
-			_input_queues = null;
+			InputQueues = null;
 		}
 
 		public void Init(ref Config config) {
-			_config = config;
-			_callbacks = config.callbacks;
-			_framecount = 0;
-			_rollingback = false;
+			this.config = config;
+			Callbacks = config.Callbacks;
+			FrameCount = 0;
+			IsRollingBack = false;
 
-			_max_prediction_frames = config.num_prediction_frames;
+			MaxPredictionFrames = config.NumPredictionFrames;
 
 			CreateQueues(ref config);
 		}
 
 		public void SetLastConfirmedFrame(int frame) {
-			_last_confirmed_frame = frame;
-			if (_last_confirmed_frame > 0) {
-				for (int i = 0; i < _config.num_players; i++) {
-					_input_queues[i].DiscardConfirmedFrames(frame - 1);
+			LastConfirmedFrame = frame;
+			if (LastConfirmedFrame > 0) {
+				for (int i = 0; i < config.NumPlayers; i++) {
+					InputQueues[i].DiscardConfirmedFrames(frame - 1);
 				}
 			}
 		}
 
 		public void SetFrameDelay(int queue, int delay) {
-			_input_queues[queue].SetFrameDelay(delay);
+			InputQueues[queue].SetFrameDelay(delay);
 		}
 
 		public bool AddLocalInput(int queue, ref GameInput input) {
-			int frames_behind = _framecount - _last_confirmed_frame; 
-			if (_framecount >= _max_prediction_frames && frames_behind >= _max_prediction_frames) {
-				LogUtil.Log("Rejecting input from emulator: reached prediction barrier.\n");
+			int frames_behind = FrameCount - LastConfirmedFrame; 
+			if (FrameCount >= MaxPredictionFrames && frames_behind >= MaxPredictionFrames) {
+				LogUtil.Log($"Rejecting input from emulator: reached prediction barrier.{Environment.NewLine}");
 				return false;
 			}
 
-			if (_framecount == 0) {
+			if (FrameCount == 0) {
 				SaveCurrentFrame();
 			}
 
-			LogUtil.Log($"Sending undelayed local frame {_framecount} to queue {queue}.\n");
-			input.frame = _framecount;
-			_input_queues[queue].AddInput(ref input);
+			LogUtil.Log($"Sending undelayed local frame {FrameCount} to queue {queue}.{Environment.NewLine}");
+			input.frame = FrameCount;
+			InputQueues[queue].AddInput(ref input);
 
 			return true;
 		}
 
 		public void AddRemoteInput(int queue, ref GameInput input) {
-			_input_queues[queue].AddInput(ref input);
+			InputQueues[queue].AddInput(ref input);
 		}
 
 		public unsafe int GetConfirmedInputs(byte* values, int size, int frame) {
 			int disconnect_flags = 0;
 
-			if (size < _config.num_players * _config.input_size) {
+			if (size < config.NumPlayers * config.InputSize) {
 				throw new ArgumentException();
 			}
 
@@ -116,17 +130,17 @@ namespace GGPort {
 				values[i] = 0;
 			}
 			
-			for (int i = 0; i < _config.num_players; i++) {
+			for (int i = 0; i < config.NumPlayers; i++) {
 				GameInput input = new GameInput();
-				if (_local_connect_status[i].disconnected && frame > _local_connect_status[i].last_frame) {
+				if (LocalConnectStatuses[i].IsDisconnected && frame > LocalConnectStatuses[i].LastFrame) {
 					disconnect_flags |= (1 << i);
 					input.erase();
 				} else {
-					_input_queues[i].GetConfirmedInput(frame, out input);
+					InputQueues[i].GetConfirmedInput(frame, out input);
 				}
 
-				int startingByteIndex = i * _config.input_size;
-				for (int j = 0; j < _config.input_size; j++) {
+				int startingByteIndex = i * config.InputSize;
+				for (int j = 0; j < config.InputSize; j++) {
 					values[startingByteIndex + j] = input.bits[j];
 				}
 			}
@@ -137,7 +151,7 @@ namespace GGPort {
 			int disconnect_flags = 0;
 			//char *output = (char *)values;
 
-			if (size < _config.num_players * _config.input_size) {
+			if (size < config.NumPlayers * config.InputSize) {
 				throw new ArgumentException();
 			}
 			
@@ -145,17 +159,17 @@ namespace GGPort {
 				Buffer.SetByte(values, i, 0);
 			}
 			
-			for (int i = 0; i < _config.num_players; i++) {
+			for (int i = 0; i < config.NumPlayers; i++) {
 				GameInput input = new GameInput();
-				if (_local_connect_status[i].disconnected && _framecount > _local_connect_status[i].last_frame) {
+				if (LocalConnectStatuses[i].IsDisconnected && FrameCount > LocalConnectStatuses[i].LastFrame) {
 					disconnect_flags |= (1 << i);
 					input.erase();
 				} else {
-					_input_queues[i].GetInput(_framecount, out input);
+					InputQueues[i].GetInput(FrameCount, out input);
 				}
 				
-				int startingByteIndex = i * _config.input_size;
-				for (int j = 0; j < _config.input_size; j++) {
+				int startingByteIndex = i * config.InputSize;
+				for (int j = 0; j < config.InputSize; j++) {
 					Buffer.SetByte(values, startingByteIndex + j, input.bits[j]);
 				}
 			}
@@ -169,50 +183,45 @@ namespace GGPort {
 		}
 
 		public void AdjustSimulation(int seek_to) {
-			int framecount = _framecount;
-			int count = _framecount - seek_to;
+			int framecount = FrameCount;
+			int count = FrameCount - seek_to;
 
-			LogUtil.Log("Catching up\n");
-			_rollingback = true;
+			LogUtil.Log($"Catching up{Environment.NewLine}");
+			IsRollingBack = true;
 
-			/*
-			 * Flush our input queue and load the last frame.
-			 */
+			// Flush our input queue and load the last frame.
 			LoadFrame(seek_to);
-			if (_framecount != seek_to) {
+			if (FrameCount != seek_to) {
 				throw new ArgumentException();
 			}
 
-			/*
-			 * Advance frame by frame (stuffing notifications back to 
-			 * the master).
-			 */
-			ResetPrediction(_framecount);
+			// Advance frame by frame (stuffing notifications back to the master).
+			ResetPrediction(FrameCount);
 			for (int i = 0; i < count; i++) {
-				_callbacks.advance_frame(0);
+				Callbacks.AdvanceFrame(0);
 			}
 
-			if (_framecount != framecount) {
+			if (FrameCount != framecount) {
 				throw new ArgumentException();
 			}
 
-			_rollingback = false;
+			IsRollingBack = false;
 
-			LogUtil.Log("---\n");   
+			LogUtil.Log($"---{Environment.NewLine}");   
 		}
 
 		public void IncrementFrame() {
-			_framecount++;
+			FrameCount++;
 			SaveCurrentFrame();
 		}
 		
-		public int GetFrameCount() { return _framecount; }
-		public bool InRollback() { return _rollingback; }
+		public int GetFrameCount() { return FrameCount; }
+		public bool InRollback() { return IsRollingBack; }
 
 		public bool GetEvent(out Event e) {
-			if (_event_queue.size() != 0) {
-				e = _event_queue.front();
-				_event_queue.pop();
+			if (EventQueue.size() != 0) {
+				e = EventQueue.front();
+				EventQueue.pop();
 				return true;
 			}
 
@@ -250,33 +259,34 @@ namespace GGPort {
 			public int head { get; set; }
 
 			public SavedState(int head) : this() {
-				frames = new SavedFrame[MAX_PREDICTION_FRAMES + 2];
+				frames = new SavedFrame[kMaxPredictionFrames + 2];
+				this.head = head;
 			}
 		};
 
 		public void LoadFrame(int frame) {
 			// find the frame in question
-			if (frame == _framecount) {
-				LogUtil.Log("Skipping NOP.\n");
+			if (frame == FrameCount) {
+				LogUtil.Log($"Skipping NOP.{Environment.NewLine}");
 				return;
 			}
 
 			// Move the head pointer back and load it up
-			_savedstate.head = FindSavedFrameIndex(frame);
-			SavedFrame state = _savedstate.frames[_savedstate.head];
+			savedState.head = FindSavedFrameIndex(frame);
+			SavedFrame state = savedState.frames[savedState.head];
 
-			LogUtil.Log($"=== Loading frame info {state.frame} (size: {state.cbuf}  checksum: {state.checksum:x8}).\n");
+			LogUtil.Log($"=== Loading frame info {state.frame} (size: {state.cbuf}  checksum: {state.checksum:x8}).{Environment.NewLine}");
 
 			if (state.buf == null || state.cbuf == 0) {
 				throw new ArgumentException();
 			}
 			
-			_callbacks.load_game_state(state.buf);
+			Callbacks.LoadGameState(state.buf);
 
 			// Reset framecount and the head of the state ring-buffer to point in
 			// advance of the current frame (as if we had just finished executing it).
-			_framecount = state.frame;
-			_savedstate.head = (_savedstate.head + 1) % _savedstate.frames.Length;
+			FrameCount = state.frame;
+			savedState.head = (savedState.head + 1) % savedState.frames.Length;
 		}
 
 
@@ -285,22 +295,22 @@ namespace GGPort {
 			* See StateCompress for the real save feature implemented by FinalBurn.
 			* Write everything into the head, then advance the head pointer.
 			*/
-			SavedFrame state = _savedstate.frames[_savedstate.head];
+			SavedFrame state = savedState.frames[savedState.head];
 			if (state.buf != null) {
-				_callbacks.free_buffer(state.buf);
+				Callbacks.FreeBuffer(state.buf);
 				state.buf = null;
 			}
-			state.frame = _framecount;
-			_callbacks.save_game_state(ref state.buf, ref state.cbuf, ref state.checksum, state.frame);
+			state.frame = FrameCount;
+			Callbacks.SaveGameState(ref state.buf, ref state.cbuf, ref state.checksum, state.frame);
 
-			LogUtil.Log($"=== Saved frame info {state.frame} (size: {state.cbuf}  checksum: {state.checksum:x8}).\n");
-			_savedstate.head = (_savedstate.head + 1) % _savedstate.frames.Length;
+			LogUtil.Log($"=== Saved frame info {state.frame} (size: {state.cbuf}  checksum: {state.checksum:x8}).{Environment.NewLine}");
+			savedState.head = (savedState.head + 1) % savedState.frames.Length;
 		}
 
 		protected int FindSavedFrameIndex(int frame) {
-			int i, count = _savedstate.frames.Length;
+			int i, count = savedState.frames.Length;
 			for (i = 0; i < count; i++) {
-				if (_savedstate.frames[i].frame == frame) {
+				if (savedState.frames[i].frame == frame) {
 					break;
 				}
 			}
@@ -311,38 +321,38 @@ namespace GGPort {
 		}
 
 		public SavedFrame GetLastSavedFrame() {
-			int i = _savedstate.head - 1;
+			int i = savedState.head - 1;
 			if (i < 0) {
-				i = _savedstate.frames.Length - 1;
+				i = savedState.frames.Length - 1;
 			}
-			return _savedstate.frames[i];
+			return savedState.frames[i];
 		}
 
 		protected bool CreateQueues(ref Config config) {
-			_input_queues = new InputQueue[_config.num_players];
-			for (int i = 0; i < _input_queues.Length; i++) {
-				_input_queues[i] = new InputQueue();
+			InputQueues = new InputQueue[this.config.NumPlayers];
+			for (int i = 0; i < InputQueues.Length; i++) {
+				InputQueues[i] = new InputQueue();
 			}
 
-			for (int i = 0; i < _config.num_players; i++) {
-				_input_queues[i].Init(i, _config.input_size);
+			for (int i = 0; i < this.config.NumPlayers; i++) {
+				InputQueues[i].Init(i, this.config.InputSize);
 			}
 			return true;
 		}
 
 		protected bool CheckSimulationConsistency(out int seekTo) {
-			int first_incorrect = GameInput.NullFrame;
-			for (int i = 0; i < _config.num_players; i++) {
-				int incorrect = _input_queues[i].GetFirstIncorrectFrame();
-				LogUtil.Log($"considering incorrect frame {incorrect} reported by queue {i}.\n");
+			int first_incorrect = GameInput.kNullFrame;
+			for (int i = 0; i < config.NumPlayers; i++) {
+				int incorrect = InputQueues[i].GetFirstIncorrectFrame();
+				LogUtil.Log($"considering incorrect frame {incorrect} reported by queue {i}.{Environment.NewLine}");
 
-				if (incorrect != GameInput.NullFrame && (first_incorrect == GameInput.NullFrame || incorrect < first_incorrect)) {
+				if (incorrect != GameInput.kNullFrame && (first_incorrect == GameInput.kNullFrame || incorrect < first_incorrect)) {
 					first_incorrect = incorrect;
 				}
 			}
 
-			if (first_incorrect == GameInput.NullFrame) {
-				LogUtil.Log("prediction ok.  proceeding.\n");
+			if (first_incorrect == GameInput.kNullFrame) {
+				LogUtil.Log($"prediction ok.  proceeding.{Environment.NewLine}");
 				seekTo = -1;
 				return true;
 			}
@@ -351,23 +361,9 @@ namespace GGPort {
 		}
 
 		protected void ResetPrediction(int frameNumber) {
-			for (int i = 0; i < _config.num_players; i++) {
-				_input_queues[i].ResetPrediction(frameNumber);
+			for (int i = 0; i < config.NumPlayers; i++) {
+				InputQueues[i].ResetPrediction(frameNumber);
 			}
 		}
-		
-		protected GGPOSessionCallbacks _callbacks;
-		protected SavedState     _savedstate;
-		protected Config         _config;
-		
-		protected bool           _rollingback;
-		protected int            _last_confirmed_frame;
-		protected int            _framecount;
-		protected int            _max_prediction_frames;
-		
-		protected InputQueue[]     _input_queues;
-
-		protected RingBuffer<Event> _event_queue;
-		protected UDPMessage.connect_status[] _local_connect_status;
-   }
+	}
 }

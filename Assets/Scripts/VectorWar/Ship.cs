@@ -1,6 +1,7 @@
-﻿using UnityEngine;
+﻿using System;
 
 namespace VectorWar {
+	[Serializable]
 	public class Ship {
 		public const int STARTING_HEALTH = 100;
 		public const int SHIP_RADIUS = 15;

@@ -13,7 +13,7 @@ namespace GGPort {
 	public static class Platform {
 		private static readonly Dictionary<string, int> configIntDefaults = new Dictionary<string, int> {
 			["ggpo.network.delay"] = 0,
-			["ggpo.oop.percent"] = 50
+			["ggpo.oop.percent"] = 0
 		};
 		
 		private static readonly Dictionary<string, bool> configBoolDefaults = new Dictionary<string, bool> {
@@ -41,7 +41,9 @@ namespace GGPort {
 			//MessageBoxA(NULL, msg, "GGPO Assertion Failed", MB_OK | MB_ICONEXCLAMATION);
 		}
 
-		public static long GetCurrentTimeMS() { return DateTime.Now.ToFileTimeUtc(); }
+		public static long GetCurrentTimeMS() {
+			return DateTimeOffset.Now.ToUnixTimeMilliseconds();
+		}
 
 		public static int GetConfigInt(string name) {
 			if (int.TryParse(Environment.GetEnvironmentVariable(name), out int parsedEnvVarValue)) {

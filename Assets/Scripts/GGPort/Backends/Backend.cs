@@ -5,34 +5,34 @@ namespace GGPort {
 	// XXX need to go through all interfaces and see that the implementers are correctly overriding rather than just hiding
 	// NOTE to that end, incorrect signatures will be a comp error for not implementing interface/abstract functions
 	public abstract class GGPOSession {
-		public virtual GGPOErrorCode DoPoll(int timeout) { return GGPOErrorCode.GGPO_OK; }
-		public abstract GGPOErrorCode AddPlayer(ref GGPOPlayer player, out GGPOPlayerHandle handle);
-		public abstract GGPOErrorCode AddLocalInput(GGPOPlayerHandle player, object value, int size);
-		public abstract GGPOErrorCode SyncInput(ref Array values, int size, ref int? disconnect_flags);
-		public virtual GGPOErrorCode IncrementFrame() { return GGPOErrorCode.GGPO_OK; }
-		public virtual GGPOErrorCode Chat(string text) { return GGPOErrorCode.GGPO_OK; }
-		public virtual GGPOErrorCode DisconnectPlayer(GGPOPlayerHandle handle) { return GGPOErrorCode.GGPO_OK; }
+		public virtual ErrorCode DoPoll(int timeout) { return ErrorCode.Success; }
+		public abstract ErrorCode AddPlayer(ref GGPOPlayer player, out GGPOPlayerHandle handle);
+		public abstract ErrorCode AddLocalInput(GGPOPlayerHandle player, byte[] value, int size);
+		public abstract ErrorCode SyncInput(ref Array values, int size, ref int? disconnect_flags);
+		public virtual ErrorCode IncrementFrame() { return ErrorCode.Success; }
+		public virtual ErrorCode Chat(string text) { return ErrorCode.Success; }
+		public virtual ErrorCode DisconnectPlayer(GGPOPlayerHandle handle) { return ErrorCode.Success; }
 
-		public virtual GGPOErrorCode GetNetworkStats(out GGPONetworkStats stats, GGPOPlayerHandle handle) {
+		public virtual ErrorCode GetNetworkStats(out GGPONetworkStats stats, GGPOPlayerHandle handle) {
 			stats = default;
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
-		public virtual GGPOErrorCode Log(string msg) {
+		public virtual ErrorCode Log(string msg) {
 			LogUtil.Log(msg);
-			return GGPOErrorCode.GGPO_OK;
+			return ErrorCode.Success;
 		}
 
-		public virtual GGPOErrorCode SetFrameDelay(GGPOPlayerHandle player, int delay) {
-			return GGPOErrorCode.GGPO_ERRORCODE_UNSUPPORTED;
+		public virtual ErrorCode SetFrameDelay(GGPOPlayerHandle player, int delay) {
+			return ErrorCode.Unsupported;
 		}
 
-		public virtual GGPOErrorCode SetDisconnectTimeout(uint timeout) {
-			return GGPOErrorCode.GGPO_ERRORCODE_UNSUPPORTED;
+		public virtual ErrorCode SetDisconnectTimeout(uint timeout) {
+			return ErrorCode.Unsupported;
 		}
 
-		public virtual GGPOErrorCode SetDisconnectNotifyStart(uint timeout) {
-			return GGPOErrorCode.GGPO_ERRORCODE_UNSUPPORTED;
+		public virtual ErrorCode SetDisconnectNotifyStart(uint timeout) {
+			return ErrorCode.Unsupported;
 		}
 	}
 }
