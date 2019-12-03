@@ -13,12 +13,12 @@ namespace GGPort {
 		}
 	}
 
-	public struct GGPOPlayerHandle {
+	public struct PlayerHandle {
 		public const int kInvalidHandle = -1;
 		
 		public readonly int HandleValue;
 
-		public GGPOPlayerHandle(int handleValue) {
+		public PlayerHandle(int handleValue) {
 			HandleValue = handleValue;
 		}
 	}
@@ -53,7 +53,7 @@ namespace GGPort {
 	*
 	*/
 
-	public struct GGPOPlayer {
+	public struct Player {
 		public int Size;
 		public GGPOPlayerType Type;
 		public int PlayerNum;
@@ -112,7 +112,7 @@ namespace GGPort {
 	* the GGPOEvent object indicates how many frames the client is.
 	*
 	*/
-	public enum GGPOEventCode {
+	public enum EventCode {
 		ConnectedToPeer = 1000,
 		SynchronizingWithPeer = 1001,
 		SynchronizedWithPeer = 1002,
@@ -129,8 +129,8 @@ namespace GGPort {
 	* explanation of each event.
 	*/
 	[StructLayout(LayoutKind.Explicit)]
-	public struct GGPOEvent {
-		[FieldOffset(0)] public GGPOEventCode code;
+	public struct Event {
+		[FieldOffset(0)] public EventCode code;
 
 		[FieldOffset(4)] public Connected connected;
 		[FieldOffset(4)] public Synchronizing synchronizing;
@@ -141,21 +141,21 @@ namespace GGPort {
 		[FieldOffset(4)] public ConnectionResumed connectionResumed;
 
 		public struct Connected {
-			public GGPOPlayerHandle player { get; set; }
+			public PlayerHandle player { get; set; }
 		}
 
 		public struct Synchronizing {
-			public GGPOPlayerHandle player { get; set; }
+			public PlayerHandle player { get; set; }
 			public int count { get; set; }
 			public int total { get; set; }
 		}
 
 		public struct Synchronized {
-			public GGPOPlayerHandle player { get; set; }
+			public PlayerHandle player { get; set; }
 		}
 
 		public struct Disconnected {
-			public GGPOPlayerHandle player { get; set; }
+			public PlayerHandle player { get; set; }
 		}
 
 		public struct TimeSync {
@@ -163,15 +163,15 @@ namespace GGPort {
 		}
 
 		public struct ConnectionInterrupted {
-			public GGPOPlayerHandle player { get; set; }
+			public PlayerHandle player { get; set; }
 			public int disconnect_timeout { get; set; }
 		}
 
 		public struct ConnectionResumed {
-			public GGPOPlayerHandle player { get; set; }
+			public PlayerHandle player { get; set; }
 		}
 
-		public GGPOEvent(GGPOEventCode code) : this() {
+		public Event(EventCode code) : this() {
 			this.code = code;
 		}
 	}
@@ -245,7 +245,7 @@ namespace GGPort {
 		* on_event - Notification that something has happened.  See the GGPOEventCode
 		* structure above for more information.
 		*/
-		public delegate bool OnEventDelegate(ref GGPOEvent info);
+		public delegate bool OnEventDelegate(ref Event info);
 
 		public OnEventDelegate OnEvent { get; set; }
 	}
@@ -284,7 +284,7 @@ namespace GGPort {
 	* calculated from the perspective of the remote player.
 	*
 	*/
-	public struct GGPONetworkStats {
+	public struct NetworkStats {
 		public Network network;
 		public TimeSync timeSync;
 

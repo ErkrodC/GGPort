@@ -241,7 +241,7 @@ namespace GGPort {
 			_shutdown_timeout = Platform.GetCurrentTimeMS() + UDP_SHUTDOWN_TIMER;
 		}
 
-		public void GetNetworkStats(ref GGPONetworkStats stats) { // TODO cleaner to serve stats struct from here? to get out over ref
+		public void GetNetworkStats(ref NetworkStats stats) { // TODO cleaner to serve stats struct from here? to get out over ref
 			stats.network.Ping = _round_trip_time;
 			stats.network.SendQueueLength = _pending_output.size();
 			stats.network.KbpsSent = _kbps_sent;

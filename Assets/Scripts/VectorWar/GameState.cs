@@ -74,32 +74,31 @@ namespace VectorWar {
 		public void ParseShipInputs(int inputs, int i, out float heading, out float thrust, out int fire) {
 			Ship ship = _ships[i];
 
-			SessionInterface.ggpo_log(ref Globals.ggpo, $"parsing ship {i} inputs: {inputs}.{Environment.NewLine}");
+			LogUtil.Log($"parsing ship {i} inputs: {inputs}.{Environment.NewLine}");
 
-			if ((inputs & (int) Globals.VectorWarInputs.INPUT_ROTATE_RIGHT) != 0) {
+			if ((inputs & (int) VectorWar.Input.InputRotateRight) != 0) {
 				heading = (ship.heading + Ship.ROTATE_INCREMENT) % 360;
-			} else if ((inputs & (int) Globals.VectorWarInputs.INPUT_ROTATE_LEFT) != 0) {
+			} else if ((inputs & (int) VectorWar.Input.InputRotateLeft) != 0) {
 				heading = (ship.heading - Ship.ROTATE_INCREMENT + 360) % 360;
 			} else {
 				heading = ship.heading;
 			}
 
-			if ((inputs & (int) Globals.VectorWarInputs.INPUT_THRUST) != 0) {
+			if ((inputs & (int) VectorWar.Input.InputThrust) != 0) {
 				thrust = Ship.SHIP_THRUST;
-			} else if ((inputs & (int) Globals.VectorWarInputs.INPUT_BREAK) != 0) {
+			} else if ((inputs & (int) VectorWar.Input.InputBreak) != 0) {
 				thrust = -Ship.SHIP_THRUST;
 			} else {
 				thrust = 0;
 			}
 
-			fire = inputs & (int) Globals.VectorWarInputs.INPUT_FIRE;
+			fire = inputs & (int) VectorWar.Input.InputFire;
 		}
 
 		public void MoveShip(int which, float heading, float thrust, int fire) {
 			Ship ship = _ships[which];
 
-			SessionInterface.ggpo_log(
-				ref Globals.ggpo,
+			LogUtil.Log(
 				$"calculation of new ship coordinates: (thrust:{thrust:F4} heading:{heading:F4}).{Environment.NewLine}"
 			);
 
@@ -107,7 +106,7 @@ namespace VectorWar {
 
 			if (ship.cooldown == 0) {
 				if (fire != 0) {
-					SessionInterface.ggpo_log(ref Globals.ggpo, $"firing bullet.{Environment.NewLine}");
+					LogUtil.Log($"firing bullet.{Environment.NewLine}");
 					for (int i = 0; i < Ship.MAX_BULLETS; i++) {
 						float dx = (float) Math.Cos(
 							MathUtil.degtorad(ship.heading)
@@ -144,15 +143,13 @@ namespace VectorWar {
 				}
 			}
 
-			SessionInterface.ggpo_log(
-				ref Globals.ggpo,
+			LogUtil.Log(
 				$"new ship velocity: (dx:{ship.deltaVelocity.x:F4} dy:{ship.deltaVelocity.y:F4}).{Environment.NewLine}"
 			);
 
 			ship.position.x += ship.deltaVelocity.x;
 			ship.position.y += ship.deltaVelocity.y;
-			SessionInterface.ggpo_log(
-				ref Globals.ggpo,
+			LogUtil.Log(
 				$"new ship position: (dx:{ship.position.x:F4} dy:{ship.position.y:F4}).{Environment.NewLine}"
 			);
 

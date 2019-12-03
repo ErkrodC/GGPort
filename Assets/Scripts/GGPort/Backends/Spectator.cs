@@ -9,7 +9,7 @@ using System;
 using System.Net;
 
 namespace GGPort {
-	public class SpectatorBackend : GGPOSession, IPollSink, UDP.Callbacks {
+	public class SpectatorBackend : Session, IPollSink, UDP.Callbacks {
 		public const int SPECTATOR_FRAME_BUFFER_SIZE = 64;
 		
 		protected SessionCallbacks _callbacks;
@@ -52,24 +52,23 @@ namespace GGPort {
 			_callbacks.BeginGame(gamename);
 		}
 
-		public override ErrorCode DoPoll(int timeout) {
+		public override ErrorCode Idle(int timeout) {
 			_poll.Pump(0);
 
 			PollUdpProtocolEvents();
 			return ErrorCode.Success;
 		}
 
-		public override ErrorCode AddPlayer(ref GGPOPlayer player, out GGPOPlayerHandle handle) {
-			handle = new GGPOPlayerHandle(-1);
+		public override ErrorCode AddPlayer(ref Player player, out PlayerHandle handle) {
+			handle = new PlayerHandle(-1);
 			return ErrorCode.Unsupported;
 		}
 
-		public override ErrorCode AddLocalInput(GGPOPlayerHandle player, byte[] value, int size) {
+		public override ErrorCode AddLocalInput(PlayerHandle player, byte[] value, int size) {
 			return ErrorCode.Success;
 		}
 
-		// TODO nullable int should probably go...
-		public override unsafe ErrorCode SyncInput(ref Array values, int size, ref int? disconnect_flags) {
+		public override unsafe ErrorCode SynchronizeInput(ref Array values, int size, ref int disconnectFlags) {
 			// Wait until we've started to return inputs.
 			if (_synchronizing) {
 				return ErrorCode.NotSynchronized;
@@ -93,9 +92,7 @@ namespace GGPort {
 				Buffer.SetByte(values, i, input.bits[i]);
 			}
 			
-			if (disconnect_flags != null) {
-				disconnect_flags = 0; // xxx: should get them from the host!
-			}
+			disconnectFlags = 0; // xxx: should get them from the host!
 			
 			_next_input_to_send++;
 
@@ -104,24 +101,24 @@ namespace GGPort {
 			return ErrorCode.Success;
 		}
 
-		public override ErrorCode IncrementFrame() {
-			Log($"End of frame ({_next_input_to_send - 1})...{Environment.NewLine}");
-			DoPoll(0);
+		public override ErrorCode AdvanceFrame() {
+			LogUtil.Log($"End of frame ({_next_input_to_send - 1})...{Environment.NewLine}");
+			Idle(0);
 			PollUdpProtocolEvents();
 
 			return ErrorCode.Success;
 		}
 
-		public override ErrorCode DisconnectPlayer(GGPOPlayerHandle handle) {
+		public override ErrorCode DisconnectPlayer(PlayerHandle handle) {
 			return ErrorCode.Unsupported;
 		}
 
-		public override ErrorCode GetNetworkStats(out GGPONetworkStats stats, GGPOPlayerHandle handle) {
+		public override ErrorCode GetNetworkStats(out NetworkStats stats, PlayerHandle handle) {
 			stats = default;
 			return ErrorCode.Unsupported;
 		}
 
-		public override ErrorCode SetFrameDelay(GGPOPlayerHandle player, int delay) {
+		public override ErrorCode SetFrameDelay(PlayerHandle player, int frameDelay) {
 			return ErrorCode.Unsupported;
 		}
 
@@ -146,18 +143,18 @@ namespace GGPort {
 		}
 
 		protected void OnUdpProtocolEvent(ref UDPProtocol.Event evt) {
-			GGPOEvent info = new GGPOEvent();
+			Event info = new Event();
 			
 			switch (evt.type) {
 				case UDPProtocol.Event.Type.Connected: {
-					info.code = GGPOEventCode.ConnectedToPeer;
-					info.connected.player = new GGPOPlayerHandle(0);
+					info.code = EventCode.ConnectedToPeer;
+					info.connected.player = new PlayerHandle(0);
 					_callbacks.OnEvent(ref info);
 					break;
 				}
 				case UDPProtocol.Event.Type.Synchronizing: {
-					info.code = GGPOEventCode.SynchronizingWithPeer;
-					info.synchronizing.player = new GGPOPlayerHandle(0);
+					info.code = EventCode.SynchronizingWithPeer;
+					info.synchronizing.player = new PlayerHandle(0);
 					info.synchronizing.count = evt.synchronizing.count;
 					info.synchronizing.total = evt.synchronizing.total;
 					_callbacks.OnEvent(ref info);
@@ -165,32 +162,32 @@ namespace GGPort {
 				}
 				case UDPProtocol.Event.Type.Synchronized: {
 					if (_synchronizing) {
-						info.code = GGPOEventCode.SynchronizedWithPeer;
-						info.synchronized.player = new GGPOPlayerHandle(0);
+						info.code = EventCode.SynchronizedWithPeer;
+						info.synchronized.player = new PlayerHandle(0);
 						_callbacks.OnEvent(ref info);
 
-						info.code = GGPOEventCode.Running;
+						info.code = EventCode.Running;
 						_callbacks.OnEvent(ref info);
 						_synchronizing = false;
 					}
 					break;
 				}
 				case UDPProtocol.Event.Type.NetworkInterrupted: {
-					info.code = GGPOEventCode.ConnectionInterrupted;
-					info.connectionInterrupted.player = new GGPOPlayerHandle(0);
+					info.code = EventCode.ConnectionInterrupted;
+					info.connectionInterrupted.player = new PlayerHandle(0);
 					info.connectionInterrupted.disconnect_timeout = evt.network_interrupted.disconnect_timeout;
 					_callbacks.OnEvent(ref info);
 					break;
 				}
 				case UDPProtocol.Event.Type.NetworkResumed: {
-					info.code = GGPOEventCode.ConnectionResumed;
-					info.connectionResumed.player = new GGPOPlayerHandle(0);
+					info.code = EventCode.ConnectionResumed;
+					info.connectionResumed.player = new PlayerHandle(0);
 					_callbacks.OnEvent(ref info);
 					break;
 				}
 				case UDPProtocol.Event.Type.Disconnected: {
-					info.code = GGPOEventCode.DisconnectedFromPeer;
-					info.disconnected.player = new GGPOPlayerHandle(0);
+					info.code = EventCode.DisconnectedFromPeer;
+					info.disconnected.player = new PlayerHandle(0);
 					_callbacks.OnEvent(ref info);
 					break;
 				}

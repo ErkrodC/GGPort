@@ -1,12 +1,10 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
 using System.Text;
 
 namespace GGPort {
 	public static class LogUtil {
-		public static FileStream logfile = null;
-		public static string logbuf = null;
-		private static long start = 0;
+		private static FileStream logfile;
+		private static long start;
 
 		public static void Log(string msg) {
 			if (!Platform.GetConfigBool("ggpo.log") || Platform.GetConfigBool("ggpo.log.ignore")) {
@@ -18,10 +16,10 @@ namespace GGPort {
 				logfile = File.OpenWrite(filename);
 			}
 			
-			Log(logfile, msg);
+			LogToFile(logfile, msg);
 		}
 
-		public static void Log(FileStream fp, string msg) {
+		private static void LogToFile(FileStream fp, string msg) {
 			string toWrite = "";
 
 			if (Platform.GetConfigBool("ggpo.log.timestamps")) {
@@ -32,7 +30,7 @@ namespace GGPort {
 					t = Platform.GetCurrentTimeMS() - start;
 				}
 				
-				toWrite = $"[{t / 1000}.{t % 1000:000}] : ";
+				toWrite = $"[{t / 1000}.{t % 1000:000}]: ";
 			}
 
 			toWrite += msg;
@@ -40,14 +38,6 @@ namespace GGPort {
 
 			fp.Write(buffer, 0, buffer.Length);
 			fp.Flush();
-
-			logbuf = msg;
 		}
-
-		public static void LogFlush() {
-			logfile?.Flush();
-		}
-		
-		public static void LogFlushOnLog(bool flush) { }
 	}
 }

@@ -5,7 +5,7 @@ using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 
 namespace GGPort {
-	public class SyncTestBackend : GGPOSession {
+	public class SyncTestBackend : Session {
 		protected SessionCallbacks _callbacks;
 		protected Sync _sync;
 		protected int _num_players;
@@ -44,9 +44,9 @@ namespace GGPort {
 			_callbacks.BeginGame(gamename);
 		}
 
-		public override ErrorCode DoPoll(int timeout) {
+		public override ErrorCode Idle(int timeout) {
 			if (!_running) {
-				GGPOEvent info = new GGPOEvent(GGPOEventCode.Running);
+				Event info = new Event(EventCode.Running);
 				
 				_callbacks.OnEvent(ref info);
 				_running = true;
@@ -54,17 +54,17 @@ namespace GGPort {
 			return ErrorCode.Success;
 		}
 
-		public override ErrorCode AddPlayer(ref GGPOPlayer player, out GGPOPlayerHandle handle) {
+		public override ErrorCode AddPlayer(ref Player player, out PlayerHandle handle) {
 			if (player.PlayerNum < 1 || player.PlayerNum > _num_players) {
-				handle = new GGPOPlayerHandle(-1);
+				handle = new PlayerHandle(-1);
 				return ErrorCode.PlayerOutOfRange;
 			}
 			
-			handle = new GGPOPlayerHandle(player.PlayerNum - 1);
+			handle = new PlayerHandle(player.PlayerNum - 1);
 			return ErrorCode.Success;
 		}
 
-		public override unsafe ErrorCode AddLocalInput(GGPOPlayerHandle player, byte[] value, int size) {
+		public override unsafe ErrorCode AddLocalInput(PlayerHandle player, byte[] value, int size) {
 			if (!_running) {
 				return ErrorCode.NotSynchronized;
 			}
@@ -83,7 +83,7 @@ namespace GGPort {
 			return ErrorCode.Success;
 		}
 
-		public override unsafe ErrorCode SyncInput(ref Array values, int size, ref int? disconnect_flags) {
+		public override unsafe ErrorCode SynchronizeInput(ref Array values, int size, ref int disconnectFlags) {
 			BeginLog(false);
 			
 			if (_rollingback) {
@@ -99,14 +99,12 @@ namespace GGPort {
 				Buffer.SetByte(values, i, _last_input.bits[i]);
 			}
 			
-			if (disconnect_flags != null) {
-				disconnect_flags = 0;
-			}
+			disconnectFlags = 0;
 			
 			return ErrorCode.Success;
 		}
 
-		public override ErrorCode IncrementFrame() {
+		public override ErrorCode AdvanceFrame() {
 			_sync.IncrementFrame();
 			_current_input.erase();
    

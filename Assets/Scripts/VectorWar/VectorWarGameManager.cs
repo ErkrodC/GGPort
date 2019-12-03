@@ -65,21 +65,21 @@ namespace VectorWar {
 			if (Input.GetKeyUp(KeyCode.P)) {
 				PerfMon.ggpoutil_perfmon_toggle();
 			} else if (Input.GetKeyUp(KeyCode.Escape)) {
-				Globals.VectorWar_Exit();
+				VectorWar.Exit();
 				Application.Quit();
 			} else {
 				foreach (KeyCode fKey in fKeys) {
 					if (Input.GetKeyUp(fKey)) {
 						int playerIndex = int.Parse(fKey.ToString().Split('F')[1]) - 1;
-						Globals.VectorWar_DisconnectPlayer(playerIndex);
+						VectorWar.DisconnectPlayer(playerIndex);
 					}
 				}
 			}
 
 			now = Platform.GetCurrentTimeMS();
-			Globals.VectorWar_Idle((int) Math.Max(0, next - now - 1));
+			VectorWar.Idle((int) Math.Max(0, next - now - 1));
 			if (now >= next) {
-				Globals.VectorWar_RunFrame(); 
+				VectorWar.RunFrame(); 
 				next = now + (1000 / 60);
 			}
 		}
@@ -90,9 +90,9 @@ namespace VectorWar {
 
 			if (spectateModeToggle.isOn) {
 				IPEndPoint hostEndPoint = hostIPText.GetIPEndPoint();
-				Globals.VectorWar_InitSpectator(localPort, numPlayers, hostEndPoint);
+				VectorWar.InitSpectator(localPort, numPlayers, hostEndPoint);
 			} else {
-				GGPOPlayer[] players = new GGPOPlayer[GGPort.Types.kMaxSpectators + GGPort.Types.kMaxPlayers];
+				Player[] players = new Player[GGPort.Types.kMaxSpectators + GGPort.Types.kMaxPlayers];
 
 				int playerIndex;
 				for (playerIndex = 0; playerIndex < numPlayers; playerIndex++) {
@@ -123,7 +123,7 @@ namespace VectorWar {
 					numSpectators++;
 				}*/
 
-				Globals.VectorWar_Init(localPort, numPlayers, players, 0/*numSpectators*/);
+				VectorWar.Init(localPort, numPlayers, players, 0/*numSpectators*/);
 			}
 
 			start = Platform.GetCurrentTimeMS();

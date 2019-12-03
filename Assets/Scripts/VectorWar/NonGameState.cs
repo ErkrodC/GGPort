@@ -20,7 +20,7 @@ namespace VectorWar {
 
 	public struct PlayerConnectionInfo {
 		public GGPOPlayerType type { get; set; }
-		public GGPOPlayerHandle handle { get; set; }
+		public PlayerHandle handle { get; set; }
 		public PlayerConnectState state { get; set; }
 		public int connect_progress { get; set; }
 		public int disconnect_timeout { get; set; }
@@ -30,7 +30,7 @@ namespace VectorWar {
 	public class NonGameState {
 		public const int MAX_PLAYERS = 64;
 
-		public GGPOPlayerHandle local_player_handle;
+		public PlayerHandle local_player_handle;
 		public PlayerConnectionInfo[] players = new PlayerConnectionInfo[MAX_PLAYERS];
 		public int num_players;
 
@@ -42,7 +42,7 @@ namespace VectorWar {
 			public int checksum;
 		};
 
-		public void SetConnectState(GGPOPlayerHandle handle, PlayerConnectState state) {
+		public void SetConnectState(PlayerHandle handle, PlayerConnectState state) {
 			for (int i = 0; i < num_players; i++) {
 				if (players[i].handle.HandleValue == handle.HandleValue) {
 					players[i].connect_progress = 0;
@@ -58,7 +58,7 @@ namespace VectorWar {
 			}
 		}
 
-		public void SetDisconnectTimeout(GGPOPlayerHandle handle, long when, int timeout) {
+		public void SetDisconnectTimeout(PlayerHandle handle, long when, int timeout) {
 			for (int i = 0; i < num_players; i++) {
 				if (players[i].handle.HandleValue == handle.HandleValue) {
 					players[i].disconnect_start = when;
@@ -69,7 +69,7 @@ namespace VectorWar {
 			}
 		}
 
-		public void UpdateConnectProgress(GGPOPlayerHandle handle, int progress) {
+		public void UpdateConnectProgress(PlayerHandle handle, int progress) {
 			for (int i = 0; i < num_players; i++) {
 				if (players[i].handle.HandleValue == handle.HandleValue) {
 					players[i].connect_progress = progress;
