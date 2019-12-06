@@ -87,7 +87,7 @@ namespace GGPort {
 			BeginLog(false);
 			
 			if (_rollingback) {
-				_last_input = _saved_frames.front().input;
+				_last_input = _saved_frames.front().Input;
 			} else {
 				if (_sync.GetFrameCount() == 0) {
 					_sync.SaveCurrentFrame();
@@ -120,18 +120,14 @@ namespace GGPort {
 			// the checksum later to verify that our replay of the same frame got the
 			// same results.
 			Sync.SavedFrame lastSavedFrame = _sync.GetLastSavedFrame();
-			byte[] lastFrameBufDeepCopy = new byte[lastSavedFrame.cbuf];
-			for (int i = 0; i < lastSavedFrame.cbuf; i++) {
-				lastFrameBufDeepCopy[i] = lastSavedFrame.buf[i];
-			}
 			
 			SavedInfo info = new SavedInfo(
 				frame,
-				lastSavedFrame.checksum,
-				lastFrameBufDeepCopy,
-				lastSavedFrame.cbuf,
+				lastSavedFrame.Checksum,
+				lastSavedFrame.GameState,
 				_last_input
 			);
+			
 			_saved_frames.push(info);
 
 			if (frame - _last_verified == _check_distance) {
@@ -148,16 +144,16 @@ namespace GGPort {
 					info = _saved_frames.front();
 					_saved_frames.pop();
 
-					if (info.frame != _sync.GetFrameCount()) {
-						RaiseSyncError("Frame number %d does not match saved frame number %d", info.frame, frame);
+					if (info.Frame != _sync.GetFrameCount()) {
+						RaiseSyncError("Frame number %d does not match saved frame number %d", info.Frame, frame);
 					}
-					int checksum = _sync.GetLastSavedFrame().checksum;
-					if (info.checksum != checksum) {
+					int checksum = _sync.GetLastSavedFrame().Checksum;
+					if (info.Checksum != checksum) {
 						LogSaveStates(info);
-						RaiseSyncError("Checksum for frame %d does not match saved (%d != %d)", frame, checksum, info.checksum);
+						RaiseSyncError("Checksum for frame %d does not match saved (%d != %d)", frame, checksum, info.Checksum);
 					}
 					
-					Console.WriteLine($"Checksum {checksum:00000000} for frame {info.frame} matches.{Environment.NewLine}");
+					Console.WriteLine($"Checksum {checksum:00000000} for frame {info.Frame} matches.{Environment.NewLine}");
 					info.FreeBuffer();
 				}
 				_last_verified = frame;
@@ -180,22 +176,21 @@ namespace GGPort {
 		}
 
 		protected struct SavedInfo {
-			public readonly int frame;
-			public readonly int checksum;
-			public byte[] buf { get; private set; }
-			public readonly int cbuf;
-			public readonly GameInput input;
+			public readonly int Frame;
+			public readonly int Checksum;
+			public object GameState { get; private set; }
+			public readonly GameInput Input;
 
-			public SavedInfo(int frame, int checksum, byte[] buf, int cbuf, GameInput input) {
-				this.frame = frame;
-				this.checksum = checksum;
-				this.buf = buf;
-				this.cbuf = cbuf;
-				this.input = input;
+			public SavedInfo(int frame, int checksum, object gameState, GameInput input) {
+				Frame = frame;
+				Checksum = checksum;
+				GameState = gameState;
+				Input = input;
 			}
 
+			// TODO remove
 			public void FreeBuffer() {
-				buf = null;
+				
 			}
 		};
 
@@ -230,10 +225,10 @@ namespace GGPort {
 
 		protected void LogSaveStates(SavedInfo info) {
 			string filename = $"synclogs\\state-{_sync.GetFrameCount():0000}-original.log";
-			_callbacks.LogGameState(filename, info.buf, info.cbuf);
+			_callbacks.LogGameState(filename, info.GameState);
 
 			filename = $"synclogs\\state-{_sync.GetFrameCount():0000}-replay.log";
-			_callbacks.LogGameState(filename, _sync.GetLastSavedFrame().buf, _sync.GetLastSavedFrame().cbuf);
+			_callbacks.LogGameState(filename, _sync.GetLastSavedFrame().GameState);
 		}
 	};
 }

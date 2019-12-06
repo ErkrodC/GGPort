@@ -14,108 +14,108 @@ using System.Runtime.Serialization.Formatters.Binary;
 
 namespace GGPort {
 	public class UDPProtocol : IPollSink {
-		private const int UDP_HEADER_SIZE = 28; // Size of IP + UDP headers
-		private const uint NUM_SYNC_PACKETS = 5;
-		private const uint SYNC_RETRY_INTERVAL = 2000;
-		private const uint SYNC_FIRST_RETRY_INTERVAL = 500;
-		private const int RUNNING_RETRY_INTERVAL = 200;
-		private const int KEEP_ALIVE_INTERVAL = 200;
-		private const int QUALITY_REPORT_INTERVAL = 1000;
-		private const int NETWORK_STATS_INTERVAL = 1000;
-		private const int UDP_SHUTDOWN_TIMER = 5000;
-		private const int MAX_SEQ_DISTANCE = 1 << 15;
+		private const int kUDPHeaderSize = 28; // Size of IP + UDP headers
+		private const uint kNumSyncPackets = 5;
+		private const uint kSyncRetryInterval = 2000;
+		private const uint kSyncFirstRetryInterval = 500;
+		private const int kRunningRetryInterval = 200;
+		private const int kKeepAliveInterval = 200;
+		private const int kQualityReportInterval = 1000;
+		private const int kNetworkStatsInterval = 1000;
+		private const int kUDPShutdownTimer = 5000;
+		private const int kMaxSeqDistance = 1 << 15;
 		
 		// Network transmission information
-		protected UDP _udp;
-		protected IPEndPoint _peer_addr;
-		protected ushort _magic_number;
-		protected int _queue;
-		protected ushort _remote_magic_number;
-		protected bool _connected;
-		protected int _send_latency;
-		protected int _oop_percent;
-		protected OOPacket _oo_packet;
-		protected RingBuffer<QueueEntry> _send_queue = new RingBuffer<QueueEntry>(64);
+		protected UDP udp;
+		protected IPEndPoint peerAddress;
+		protected ushort magicNumber;
+		protected int queue;
+		protected ushort remoteMagicNumber;
+		protected bool connected;
+		protected int sendLatency;
+		protected int oopPercent;
+		protected OOPacket ooPacket;
+		protected RingBuffer<QueueEntry> sendQueue = new RingBuffer<QueueEntry>(64);
 		
 		// Stats
-		protected int _round_trip_time;
-		protected int _packets_sent;
-		protected int _bytes_sent;
-		protected int _kbps_sent;
-		protected long _stats_start_time;
+		protected int roundTripTime;
+		protected int packetsSent;
+		protected int bytesSent;
+		protected int kbpsSent;
+		protected long statsStartTime;
 
-		// The state machine
-		protected UDPMessage.ConnectStatus[] _local_connect_status;
-		protected UDPMessage.ConnectStatus[] _peer_connect_status = new UDPMessage.ConnectStatus[UDPMessage.UDP_MSG_MAX_PLAYERS];
-		protected State _current_state;
-		protected StateUnion _state;
+		// The state machine // TODO plural naming?
+		protected UDPMessage.ConnectStatus[] localConnectStatus;
+		protected UDPMessage.ConnectStatus[] peerConnectStatus = new UDPMessage.ConnectStatus[UDPMessage.UDP_MSG_MAX_PLAYERS];
+		protected State currentState;
+		protected StateUnion state;
 
 		// Fairness
-		protected int _local_frame_advantage;
-		protected int _remote_frame_advantage;
+		protected int localFrameAdvantage;
+		protected int remoteFrameAdvantage;
 
 		// Packet loss
-		protected RingBuffer<GameInput> _pending_output = new RingBuffer<GameInput>(64);
-		protected GameInput _last_received_input;
-		protected GameInput _last_sent_input;
-		protected GameInput _last_acked_input;
-		protected long _last_send_time;
-		protected long _last_recv_time;
-		protected long _shutdown_timeout;
-		protected bool _disconnect_event_sent;
-		protected uint _disconnect_timeout;
-		protected uint _disconnect_notify_start;
-		protected bool _disconnect_notify_sent;
+		protected RingBuffer<GameInput> pendingOutput = new RingBuffer<GameInput>(64);
+		protected GameInput lastReceivedInput;
+		protected GameInput lastSentInput;
+		protected GameInput lastAckedInput;
+		protected long lastSendTime;
+		protected long lastReceiveTime;
+		protected long shutdownTimeout;
+		protected bool disconnectEventSent;
+		protected uint disconnectTimeout;
+		protected uint disconnectNotifyStart;
+		protected bool disconnectNotifySent;
 
-		protected ushort _next_send_seq;
-		protected ushort _next_recv_seq;
+		protected ushort nextSendSequenceNumber;
+		protected ushort nextReceiveSequenceNumber;
 
 		// Rift synchronization
-		protected TimeSync _timesync = new TimeSync();
+		protected TimeSync timeSync = new TimeSync();
 
 		// Event queue
-		protected RingBuffer<Event> _event_queue = new RingBuffer<Event>(64);
+		protected RingBuffer<Event> eventQueue = new RingBuffer<Event>(64);
 		
 		// Message dispatch
 		private delegate bool DispatchFn(ref UDPMessage msg, int len);
 		private readonly Dictionary<UDPMessage.MsgType, DispatchFn> table;
 
 		public UDPProtocol() {
-			_local_frame_advantage = 0;
-			_remote_frame_advantage = 0;
-			_queue = -1;
-			_magic_number = 0;
-			_remote_magic_number = 0;
-			_packets_sent = 0;
-			_bytes_sent = 0;
-			_stats_start_time = 0;
-			_last_send_time = 0;
-			_shutdown_timeout = 0;
-			_disconnect_timeout = 0;
-			_disconnect_notify_start = 0;
-			_disconnect_notify_sent = false;
-			_disconnect_event_sent = false;
-			_connected = false;
-			_next_send_seq = 0;
-			_next_recv_seq = 0;
-			_udp = null;
+			localFrameAdvantage = 0;
+			remoteFrameAdvantage = 0;
+			queue = -1;
+			magicNumber = 0;
+			remoteMagicNumber = 0;
+			packetsSent = 0;
+			bytesSent = 0;
+			statsStartTime = 0;
+			lastSendTime = 0;
+			shutdownTimeout = 0;
+			disconnectTimeout = 0;
+			disconnectNotifyStart = 0;
+			disconnectNotifySent = false;
+			disconnectEventSent = false;
+			connected = false;
+			nextSendSequenceNumber = 0;
+			nextReceiveSequenceNumber = 0;
+			udp = null;
 			
-			_last_sent_input.init(-1, null, 1);
-			_last_received_input.init(-1, null, 1);
-			_last_acked_input.init(-1, null, 1);
+			lastSentInput.init(-1, null, 1);
+			lastReceivedInput.init(-1, null, 1);
+			lastAckedInput.init(-1, null, 1);
 
-			_state = default;
+			state = default;
 			
-			for (int i = 0; i < _peer_connect_status.Length; i++) {
-				_peer_connect_status[i] = default;
-				_peer_connect_status[i].LastFrame = -1;
+			for (int i = 0; i < peerConnectStatus.Length; i++) {
+				peerConnectStatus[i] = default;
+				peerConnectStatus[i].LastFrame = -1;
 			}
 
-			_peer_addr = default;
-			_oo_packet.msg = null;
+			peerAddress = default;
+			ooPacket.msg = null;
 
-			_send_latency = Platform.GetConfigInt("ggpo.network.delay");
-			_oop_percent = Platform.GetConfigInt("ggpo.oop.percent");
+			sendLatency = Platform.GetConfigInt("ggpo.network.delay");
+			oopPercent = Platform.GetConfigInt("ggpo.oop.percent");
 			
 			table = new Dictionary<UDPMessage.MsgType, DispatchFn> {
 				[UDPMessage.MsgType.Invalid] = OnInvalid,
@@ -135,42 +135,42 @@ namespace GGPort {
 
 		// TODO last param is list?
 		public void Init(ref UDP udp, ref Poll poll, int queue, IPEndPoint endPoint, UDPMessage.ConnectStatus[] status) {
-			_udp = udp;
-			_queue = queue;
-			_local_connect_status = status;
+			this.udp = udp;
+			this.queue = queue;
+			localConnectStatus = status;
 
-			_peer_addr = endPoint;
+			peerAddress = endPoint;
 
 			do {
-				_magic_number = (ushort) new Random().Next(0, ushort.MaxValue); // TODO this class should hold a Random type var
-			} while (_magic_number == 0);
+				magicNumber = (ushort) new Random().Next(0, ushort.MaxValue); // TODO this class should hold a Random type var
+			} while (magicNumber == 0);
 			
 			poll.RegisterLoop(this);
 		}
 
 		public void Synchronize() {
-			if (_udp != null) {
-				_current_state = State.Syncing;
-				_state.sync.roundtrips_remaining = NUM_SYNC_PACKETS;
+			if (udp != null) {
+				currentState = State.Syncing;
+				state.sync.roundtrips_remaining = kNumSyncPackets;
 				SendSyncRequest();
 			}
 		}
 
 		public bool GetPeerConnectStatus(int id, out int frame) {
-			frame = _peer_connect_status[id].LastFrame;
-			return !_peer_connect_status[id].IsDisconnected;
+			frame = peerConnectStatus[id].LastFrame;
+			return !peerConnectStatus[id].IsDisconnected;
 		}
 		
-		public bool IsInitialized() { return _udp != null; }
-		public bool IsSynchronized() { return _current_state == State.Running; }
-		public bool IsRunning() { return _current_state == State.Running; }
+		public bool IsInitialized() { return udp != null; }
+		public bool IsSynchronized() { return currentState == State.Running; }
+		public bool IsRunning() { return currentState == State.Running; }
 
 		public void SendInput(ref GameInput input) {
-			if (_udp == null) { return; }
+			if (udp == null) { return; }
 
-			if (_current_state == State.Running) {
+			if (currentState == State.Running) {
 				// Check to see if this is a good time to adjust for the rift...
-				_timesync.advance_frame(ref input, _local_frame_advantage, _remote_frame_advantage);
+				timeSync.advance_frame(ref input, localFrameAdvantage, remoteFrameAdvantage);
 
 				/*
 				* Save this input packet
@@ -180,7 +180,7 @@ namespace GGPort {
 				* (better, but still ug).  For the meantime, make this queue really big to decrease
 				* the odds of this happening...
 				*/
-				_pending_output.push(input);
+				pendingOutput.push(input);
 			}
 				
 			SendPendingOutput();
@@ -188,14 +188,14 @@ namespace GGPort {
 
 		public void SendInputAck() {
 			UDPMessage msg = new UDPMessage(UDPMessage.MsgType.InputAck);
-			msg.inputAck.ackFrame = _last_received_input.frame;
+			msg.inputAck.ackFrame = lastReceivedInput.frame;
 			SendMsg(ref msg);
 		}
 
 		public bool HandlesMsg(ref IPEndPoint from, ref UDPMessage msg) {
-			if (_udp == null) { return false; }
+			if (udp == null) { return false; }
 
-			return _peer_addr.Equals(from);
+			return peerAddress.Equals(from);
 		}
 		
 		public void OnMsg(ref UDPMessage msg, int len) {
@@ -205,21 +205,21 @@ namespace GGPort {
 			ushort seq = msg.header.SequenceNumber;
 			if (msg.header.type != UDPMessage.MsgType.SyncRequest &&
 			    msg.header.type != UDPMessage.MsgType.SyncReply) {
-				if (msg.header.magic != _remote_magic_number) {
+				if (msg.header.magic != remoteMagicNumber) {
 					LogMsg("recv rejecting", ref msg);
 					return;
 				}
 
 				// filter out out-of-order packets
-				ushort skipped = (ushort)(seq - _next_recv_seq);
+				ushort skipped = (ushort)(seq - nextReceiveSequenceNumber);
 				// Log("checking sequence number -> next - seq : %d - %d = %d{Environment.NewLine}", seq, _next_recv_seq, skipped);
-				if (skipped > MAX_SEQ_DISTANCE) {
-					Log($"dropping out of order packet (seq: {seq}, last seq:{_next_recv_seq}){Environment.NewLine}");
+				if (skipped > kMaxSeqDistance) {
+					Log($"dropping out of order packet (seq: {seq}, last seq:{nextReceiveSequenceNumber}){Environment.NewLine}");
 					return;
 				}
 			}
 
-			_next_recv_seq = seq;
+			nextReceiveSequenceNumber = seq;
 			LogMsg("recv", ref msg);
 			if ((byte) msg.header.type >= table.Count) {
 				OnInvalid(ref msg, len);
@@ -227,36 +227,36 @@ namespace GGPort {
 				handled = table[msg.header.type](ref msg, len);
 			}
 			if (handled) {
-				_last_recv_time = Platform.GetCurrentTimeMS();
-				if (_disconnect_notify_sent && _current_state == State.Running) {
+				lastReceiveTime = Platform.GetCurrentTimeMS();
+				if (disconnectNotifySent && currentState == State.Running) {
 					Event evt = new Event(Event.Type.NetworkResumed);
 					QueueEvent(ref evt); // TODO ref is unnecessary?
-					_disconnect_notify_sent = false;
+					disconnectNotifySent = false;
 				}
 			}
 		}
 
 		public void Disconnect() {
-			_current_state = State.Disconnected;
-			_shutdown_timeout = Platform.GetCurrentTimeMS() + UDP_SHUTDOWN_TIMER;
+			currentState = State.Disconnected;
+			shutdownTimeout = Platform.GetCurrentTimeMS() + kUDPShutdownTimer;
 		}
 
 		public void GetNetworkStats(ref NetworkStats stats) { // TODO cleaner to serve stats struct from here? to get out over ref
-			stats.network.Ping = _round_trip_time;
-			stats.network.SendQueueLength = _pending_output.size();
-			stats.network.KbpsSent = _kbps_sent;
-			stats.timeSync.RemoteFramesBehind = _remote_frame_advantage;
-			stats.timeSync.LocalFramesBehind = _local_frame_advantage;
+			stats.network.Ping = roundTripTime;
+			stats.network.SendQueueLength = pendingOutput.size();
+			stats.network.KbpsSent = kbpsSent;
+			stats.timeSync.RemoteFramesBehind = remoteFrameAdvantage;
+			stats.timeSync.LocalFramesBehind = localFrameAdvantage;
 		}
 
 		public bool GetEvent(out Event e) {
-			if (_event_queue.size() == 0) {
+			if (eventQueue.size() == 0) {
 				e = default;
 				return false;
 			}
 			
-			e = _event_queue.front();
-			_event_queue.pop();
+			e = eventQueue.front();
+			eventQueue.pop();
 			
 			return true;
 		}
@@ -267,7 +267,7 @@ namespace GGPort {
 			* last frame they gave us plus some delta for the one-way packet
 			* trip time.
 			*/
-			int remoteFrame = _last_received_input.frame + (_round_trip_time * 60 / 1000);
+			int remoteFrame = lastReceivedInput.frame + (roundTripTime * 60 / 1000);
 
 			/*
 			* Our frame advantage is how many frames *behind* the other guy
@@ -275,54 +275,54 @@ namespace GGPort {
 			* it means they'll have to predict more often and our moves will
 			* pop more frequenetly.
 			*/
-			_local_frame_advantage = remoteFrame - localFrame;
+			localFrameAdvantage = remoteFrame - localFrame;
 		}
 
 		public int RecommendFrameDelay() {
 			// XXX: require idle input should be a configuration parameter
-			return _timesync.recommend_frame_wait_duration(false);
+			return timeSync.recommend_frame_wait_duration(false);
 		}
 
 		public void SetDisconnectTimeout(uint timeout) { // TODO cleanup as Setter?
-			_disconnect_timeout = timeout;
+			disconnectTimeout = timeout;
 		}
 
 		public void SetDisconnectNotifyStart(uint timeout) {
-			_disconnect_notify_start = timeout;
+			disconnectNotifyStart = timeout;
 		}
 
 		protected void UpdateNetworkStats() {
 			long now = Platform.GetCurrentTimeMS();
 
-			if (_stats_start_time == 0) {
-				_stats_start_time = now;
+			if (statsStartTime == 0) {
+				statsStartTime = now;
 			}
 
-			int total_bytes_sent = _bytes_sent + (UDP_HEADER_SIZE * _packets_sent);
-			float seconds = (float)((now - _stats_start_time) / 1000.0);
+			int total_bytes_sent = bytesSent + (kUDPHeaderSize * packetsSent);
+			float seconds = (float)((now - statsStartTime) / 1000.0);
 			float Bps = total_bytes_sent / seconds;
-			float udp_overhead = (float)(100.0 * (UDP_HEADER_SIZE * _packets_sent) / _bytes_sent);
+			float udp_overhead = (float)(100.0 * (kUDPHeaderSize * packetsSent) / bytesSent);
 
-			_kbps_sent = (int) (Bps / 1024);
+			kbpsSent = (int) (Bps / 1024);
 
-			Log($"Network Stats -- Bandwidth: {_kbps_sent:F} KBps   Packets Sent: {_packets_sent:D5} ({(float)_packets_sent * 1000 / (now - _stats_start_time):F} pps)   KB Sent: {total_bytes_sent / 1024.0:F}    UDP Overhead: {udp_overhead:F} %%.{Environment.NewLine}");
+			Log($"Network Stats -- Bandwidth: {kbpsSent:F} KBps   Packets Sent: {packetsSent:D5} ({(float)packetsSent * 1000 / (now - statsStartTime):F} pps)   KB Sent: {total_bytes_sent / 1024.0:F}    UDP Overhead: {udp_overhead:F} %%.{Environment.NewLine}");
 		}
 
 		protected void QueueEvent(ref Event evt) {
 			LogEvent("Queuing event", evt);
-			_event_queue.push(evt);
+			eventQueue.push(evt);
 		}
 
 		protected void ClearSendQueue() {
-			while (!_send_queue.empty()) {
-				_send_queue.front().msg = default;
-				_send_queue.pop();
+			while (!sendQueue.empty()) {
+				sendQueue.front().msg = default;
+				sendQueue.pop();
 			}
 		}
 
 		// TODO revalidate these log wrappers as they may add some info to the string passed to global log
 		protected void Log(string msg) {
-			string prefix = $"udpproto{_queue} ";
+			string prefix = $"udpproto{queue} ";
 			LogUtil.Log(prefix + msg);
 		}
 
@@ -363,50 +363,50 @@ namespace GGPort {
 		}
 
 		protected void SendSyncRequest() {
-			if (_state.sync.random == 0) {
-				_state.sync.random = (uint) (new Random().Next(0, ushort.MaxValue) & 0xFFFF);
+			if (state.sync.random == 0) {
+				state.sync.random = (uint) (new Random().Next(0, ushort.MaxValue) & 0xFFFF);
 			}
 			
 			UDPMessage msg = new UDPMessage(UDPMessage.MsgType.SyncRequest);
-			msg.syncRequest.randomRequest = _state.sync.random;
+			msg.syncRequest.randomRequest = state.sync.random;
 			SendMsg(ref msg);
 		}
 
 		protected void SendMsg(ref UDPMessage msg) {
 			LogMsg("send", ref msg);
 
-			_packets_sent++;
-			_last_send_time = Platform.GetCurrentTimeMS();
-			_bytes_sent += msg.PacketSize();
+			packetsSent++;
+			lastSendTime = Platform.GetCurrentTimeMS();
+			bytesSent += msg.PacketSize();
 
-			msg.header.magic = _magic_number;
-			msg.header.SequenceNumber = _next_send_seq++;
+			msg.header.magic = magicNumber;
+			msg.header.SequenceNumber = nextSendSequenceNumber++;
 
-			_send_queue.push(new QueueEntry(Platform.GetCurrentTimeMS(), ref _peer_addr, ref msg));
+			sendQueue.push(new QueueEntry(Platform.GetCurrentTimeMS(), ref peerAddress, ref msg));
 			PumpSendQueue();
 		}
 
 		protected void PumpSendQueue() {
 			Random random = new Random(); // TODO pry move to more global scope...maybe?
-			while (!_send_queue.empty()) {
-				QueueEntry entry = _send_queue.front();
+			while (!sendQueue.empty()) {
+				QueueEntry entry = sendQueue.front();
 
-				if (_send_latency != 0) {
+				if (sendLatency != 0) {
 					// should really come up with a gaussian distributation based on the configured
 					// value, but this will do for now.
 					
-					int jitter = _send_latency * 2 / 3 + random.Next(0, ushort.MaxValue) % _send_latency / 3; // TODO cleanup rand
-					if (Platform.GetCurrentTimeMS() < _send_queue.front().queue_time + jitter) {
+					int jitter = sendLatency * 2 / 3 + random.Next(0, ushort.MaxValue) % sendLatency / 3; // TODO cleanup rand
+					if (Platform.GetCurrentTimeMS() < sendQueue.front().queue_time + jitter) {
 						break;
 					}
 				}
 				
-				if (_oop_percent != 0 && _oo_packet.msg == null && random.Next(0, ushort.MaxValue) % 100 < _oop_percent) { // TODO cleanup rand
-					int delay = random.Next(0, ushort.MaxValue) % (_send_latency * 10 + 1000); // TODO cleanup rand
+				if (oopPercent != 0 && ooPacket.msg == null && random.Next(0, ushort.MaxValue) % 100 < oopPercent) { // TODO cleanup rand
+					int delay = random.Next(0, ushort.MaxValue) % (sendLatency * 10 + 1000); // TODO cleanup rand
 					Log($"creating rogue oop (seq: {entry.msg.header.SequenceNumber}  delay: {delay}){Environment.NewLine}");
-					_oo_packet.send_time = Platform.GetCurrentTimeMS() + delay;
-					_oo_packet.msg = entry.msg;
-					_oo_packet.dest_addr = entry.dest_addr;
+					ooPacket.send_time = Platform.GetCurrentTimeMS() + delay;
+					ooPacket.msg = entry.msg;
+					ooPacket.dest_addr = entry.dest_addr;
 				} else {
 					if (entry.dest_addr.Address.Equals(IPAddress.None)) {
 						throw new ArgumentException();
@@ -415,46 +415,48 @@ namespace GGPort {
 					BinaryFormatter formatter = new BinaryFormatter();
 					using (MemoryStream ms = new MemoryStream(entry.msg.PacketSize())) {
 						formatter.Serialize(ms, entry.msg);
-						_udp.SendTo(ms.ToArray(), (int) ms.Length, 0, entry.dest_addr);
+						udp.SendTo(ms.ToArray(), (int) ms.Length, 0, entry.dest_addr);
 					} // TODO optimize/refactor
 
 					entry.msg = default;
 				}
 				
-				_send_queue.pop();
+				sendQueue.pop();
 			}
-			if (_oo_packet.msg != null && _oo_packet.send_time < Platform.GetCurrentTimeMS()) {
+			if (ooPacket.msg != null && ooPacket.send_time < Platform.GetCurrentTimeMS()) {
 				Log("sending rogue oop!");
 					
 				BinaryFormatter b = new BinaryFormatter();
-				using (MemoryStream ms = new MemoryStream((int) _oo_packet.msg?.PacketSize())) {
-					b.Serialize(ms, (UDPMessage) _oo_packet.msg); // TODO does this needs to cast from <UdpMsg?> to <UdpMsg> ???
-					_udp.SendTo(ms.ToArray(), (int) ms.Length, 0, _oo_packet.dest_addr);
+				using (MemoryStream ms = new MemoryStream((int) ooPacket.msg?.PacketSize())) {
+					b.Serialize(ms, (UDPMessage) ooPacket.msg); // TODO does this needs to cast from <UdpMsg?> to <UdpMsg> ???
+					udp.SendTo(ms.ToArray(), (int) ms.Length, 0, ooPacket.dest_addr);
 				} // TODO optimize/refactor
 
-				_oo_packet.msg = null; // TODO does this need to be nullable?
+				ooPacket.msg = null; // TODO does this need to be nullable?
 			}
 		}
 
+		// LOH problem with sending a UDPMessage >4096 bytes originates here
+		// could possibly have to do with either input serialization and/or msg.input structure
 		protected unsafe void SendPendingOutput() {
 			UDPMessage msg = new UDPMessage(UDPMessage.MsgType.Input);
 			int i, j, offset = 0;
 			byte[] bits;
 			GameInput last;
 
-			if (_pending_output.size() != 0) {
-				last = _last_acked_input;
+			if (pendingOutput.size() != 0) {
+				last = lastAckedInput;
 				bits = msg.input.bits;
 
-				msg.input.startFrame = (uint) _pending_output.front().frame;
-				msg.input.inputSize = (byte) _pending_output.front().size;
+				msg.input.startFrame = (uint) pendingOutput.front().frame;
+				msg.input.inputSize = (byte) pendingOutput.front().size;
 
 				if (!(last.frame == -1 || last.frame + 1 == msg.input.startFrame)) {
 					throw new ArgumentException();
 				}
 				
-				for (j = 0; j < _pending_output.size(); j++) {
-					GameInput current = _pending_output.item(j);
+				for (j = 0; j < pendingOutput.size(); j++) {
+					GameInput current = pendingOutput.item(j);
 
 					bool currentEqualsLastBits = true;
 					for (int k = 0; k < current.size; k++) {
@@ -488,20 +490,20 @@ namespace GGPort {
 					}
 
 					BitVector.ClearBit(msg.input.bits, ref offset);
-					last = _last_sent_input = current;
+					last = lastSentInput = current;
 				}
 			} else {
 				msg.input.startFrame = 0;
 				msg.input.inputSize = 0;
 			}
 			
-			msg.input.ackFrame = _last_received_input.frame;
+			msg.input.ackFrame = lastReceivedInput.frame;
 			msg.input.numBits = (ushort) offset;
 
-			msg.input.disconnectRequested = _current_state == State.Disconnected;
-			if (_local_connect_status != null) {
+			msg.input.disconnectRequested = currentState == State.Disconnected;
+			if (localConnectStatus != null) {
 				for (int k = 0; k < msg.input.peerConnectStatus.Length; k++) {
-					msg.input.peerConnectStatus[k] = _local_connect_status[k];
+					msg.input.peerConnectStatus[k] = localConnectStatus[k];
 				}
 			} else {
 				for (int k = 0; k < msg.input.peerConnectStatus.Length; k++) {
@@ -522,8 +524,8 @@ namespace GGPort {
 		}
 
 		protected bool OnSyncRequest(ref UDPMessage msg, int len) {
-			if (_remote_magic_number != 0 && msg.header.magic != _remote_magic_number) {
-				Log($"Ignoring sync request from unknown endpoint ({msg.header.magic} != {_remote_magic_number}).{Environment.NewLine}");
+			if (remoteMagicNumber != 0 && msg.header.magic != remoteMagicNumber) {
+				Log($"Ignoring sync request from unknown endpoint ({msg.header.magic} != {remoteMagicNumber}).{Environment.NewLine}");
 				
 				return false;
 			}
@@ -536,38 +538,38 @@ namespace GGPort {
 		}
 
 		protected bool OnSyncReply(ref UDPMessage msg, int len) {
-			if (_current_state != State.Syncing) {
+			if (currentState != State.Syncing) {
 				Log($"Ignoring SyncReply while not syncing.{Environment.NewLine}");
 				
-				return msg.header.magic == _remote_magic_number;
+				return msg.header.magic == remoteMagicNumber;
 			}
 
-			if (msg.syncReply.randomReply != _state.sync.random) {
-				Log($"sync reply {msg.syncReply.randomReply} != {_state.sync.random}.  Keep looking...{Environment.NewLine}");
+			if (msg.syncReply.randomReply != state.sync.random) {
+				Log($"sync reply {msg.syncReply.randomReply} != {state.sync.random}.  Keep looking...{Environment.NewLine}");
 				
 				return false;
 			}
 
-			if (!_connected) {
+			if (!connected) {
 				Event evt = new Event(Event.Type.Connected);
 				QueueEvent(ref evt); // TODO ref is unnecessary?
-				_connected = true;
+				connected = true;
 			}
 
-			Log($"Checking sync state ({_state.sync.roundtrips_remaining} round trips remaining).{Environment.NewLine}");
-			if (--_state.sync.roundtrips_remaining == 0) {
+			Log($"Checking sync state ({state.sync.roundtrips_remaining} round trips remaining).{Environment.NewLine}");
+			if (--state.sync.roundtrips_remaining == 0) {
 				Log($"Synchronized!{Environment.NewLine}");
 
 				Event evt = new Event(Event.Type.Synchronized);
 				QueueEvent(ref evt); // TODO ref is unnecessary?
-				_current_state = State.Running;
-				_last_received_input.frame = -1;
-				_remote_magic_number = msg.header.magic;
+				currentState = State.Running;
+				lastReceivedInput.frame = -1;
+				remoteMagicNumber = msg.header.magic;
 			} else {
 				Event evt = new Event(Event.Type.Synchronizing) {
 					synchronizing = {
-						total = (int) NUM_SYNC_PACKETS,
-						count = (int) (NUM_SYNC_PACKETS - _state.sync.roundtrips_remaining)
+						total = (int) kNumSyncPackets,
+						count = (int) (kNumSyncPackets - state.sync.roundtrips_remaining)
 					}
 				};
 				
@@ -581,24 +583,24 @@ namespace GGPort {
 			// If a disconnect is requested, go ahead and disconnect now.
 			bool disconnect_requested = msg.input.disconnectRequested;
 			if (disconnect_requested) {
-				if (_current_state != State.Disconnected && !_disconnect_event_sent) {
+				if (currentState != State.Disconnected && !disconnectEventSent) {
 					Log($"Disconnecting endpoint on remote request.{Environment.NewLine}");
 
 					Event evt = new Event(Event.Type.Disconnected);
 					QueueEvent(ref evt); // TODO ref is unnecessary?
-					_disconnect_event_sent = true;
+					disconnectEventSent = true;
 				}
 			} else {
 				// Update the peer connection status if this peer is still considered to be part of the network.
 				UDPMessage.ConnectStatus[] remote_status = msg.input.peerConnectStatus;
-				for (int i = 0; i < _peer_connect_status.Length; i++) {
-					if (remote_status[i].LastFrame < _peer_connect_status[i].LastFrame) {
+				for (int i = 0; i < peerConnectStatus.Length; i++) {
+					if (remote_status[i].LastFrame < peerConnectStatus[i].LastFrame) {
 						throw new ArgumentException();
 					}
 					
-					_peer_connect_status[i].IsDisconnected = _peer_connect_status[i].IsDisconnected || remote_status[i].IsDisconnected;
-					_peer_connect_status[i].LastFrame = Math.Max(
-						_peer_connect_status[i].LastFrame,
+					peerConnectStatus[i].IsDisconnected = peerConnectStatus[i].IsDisconnected || remote_status[i].IsDisconnected;
+					peerConnectStatus[i].LastFrame = Math.Max(
+						peerConnectStatus[i].LastFrame,
 						remote_status[i].LastFrame
 					);
 				}
@@ -607,16 +609,16 @@ namespace GGPort {
 			/*
 			* Decompress the input.
 			*/
-			int last_received_frame_number = _last_received_input.frame;
+			int last_received_frame_number = lastReceivedInput.frame;
 			if (msg.input.numBits != 0) {
 				int offset = 0;
 				byte[] bits = msg.input.bits;
 				int numBits = msg.input.numBits;
 				int currentFrame = (int) msg.input.startFrame; // TODO ecgh
 
-				_last_received_input.size = msg.input.inputSize;
-				if (_last_received_input.frame < 0) {
-					_last_received_input.frame = (int) (msg.input.startFrame - 1); // TODO ecgh
+				lastReceivedInput.size = msg.input.inputSize;
+				if (lastReceivedInput.frame < 0) {
+					lastReceivedInput.frame = (int) (msg.input.startFrame - 1); // TODO ecgh
 				}
 
 				while (offset < numBits) {
@@ -624,20 +626,20 @@ namespace GGPort {
 					* Keep walking through the frames (parsing bits) until we reach
 					* the inputs for the frame right after the one we're on.
 					*/
-					if (currentFrame > _last_received_input.frame + 1) {
+					if (currentFrame > lastReceivedInput.frame + 1) {
 						throw new ArgumentException();
 					}
 					
-					bool useInputs = currentFrame == _last_received_input.frame + 1;
+					bool useInputs = currentFrame == lastReceivedInput.frame + 1;
 
 					while (BitVector.ReadBit(bits, ref offset) != 0) {
 						int on = BitVector.ReadBit(bits, ref offset);
 						int button = BitVector.ReadNibblet(bits, ref offset);
 						if (useInputs) {
 							if (on != 0) {
-								_last_received_input.set(button);
+								lastReceivedInput.set(button);
 							} else {
-								_last_received_input.clear(button);
+								lastReceivedInput.clear(button);
 							}
 						}
 					}
@@ -654,28 +656,28 @@ namespace GGPort {
 						/*
 						* Move forward 1 frame in the stream.
 						*/
-						if (currentFrame != _last_received_input.frame + 1) {
+						if (currentFrame != lastReceivedInput.frame + 1) {
 							throw new ArgumentException();
 						}
 						
-						_last_received_input.frame = currentFrame;
+						lastReceivedInput.frame = currentFrame;
 
 						/*
 						* Send the event to the emualtor
 						*/
 						Event evt = new Event(Event.Type.Input) {
 							input = {
-								input = _last_received_input
+								input = lastReceivedInput
 							}
 						};
 
-						string desc = _last_received_input.desc();
-						_state.running.last_input_packet_recv_time = Platform.GetCurrentTimeMS();
+						string desc = lastReceivedInput.desc();
+						state.running.last_input_packet_recv_time = Platform.GetCurrentTimeMS();
 
-						Log($"Sending frame {_last_received_input.frame} to emu queue {_queue} ({desc}).{Environment.NewLine}");
+						Log($"Sending frame {lastReceivedInput.frame} to emu queue {queue} ({desc}).{Environment.NewLine}");
 						QueueEvent(ref evt);
 					} else {
-						Log($"Skipping past frame:({currentFrame}) current is {_last_received_input.frame}.{Environment.NewLine}");
+						Log($"Skipping past frame:({currentFrame}) current is {lastReceivedInput.frame}.{Environment.NewLine}");
 					}
 
 					/*
@@ -685,17 +687,17 @@ namespace GGPort {
 				}
 			}
 
-			if (_last_received_input.frame < last_received_frame_number) {
+			if (lastReceivedInput.frame < last_received_frame_number) {
 				throw new ArgumentException();
 			}
 
 			/*
 			* Get rid of our buffered input
 			*/
-			while (_pending_output.size() != 0 && _pending_output.front().frame < msg.input.ackFrame) {
-				Log($"Throwing away pending output frame {_pending_output.front().frame}{Environment.NewLine}");
-				_last_acked_input = _pending_output.front();
-				_pending_output.pop();
+			while (pendingOutput.size() != 0 && pendingOutput.front().frame < msg.input.ackFrame) {
+				Log($"Throwing away pending output frame {pendingOutput.front().frame}{Environment.NewLine}");
+				lastAckedInput = pendingOutput.front();
+				pendingOutput.pop();
 			}
 
 			return true;
@@ -705,10 +707,10 @@ namespace GGPort {
 			/*
 			* Get rid of our buffered input
 			*/
-			while (_pending_output.size() != 0 && _pending_output.front().frame < msg.inputAck.ackFrame) {
-				Log($"Throwing away pending output frame {_pending_output.front().frame}{Environment.NewLine}");
-				_last_acked_input = _pending_output.front();
-				_pending_output.pop();
+			while (pendingOutput.size() != 0 && pendingOutput.front().frame < msg.inputAck.ackFrame) {
+				Log($"Throwing away pending output frame {pendingOutput.front().frame}{Environment.NewLine}");
+				lastAckedInput = pendingOutput.front();
+				pendingOutput.pop();
 			}
 			
 			return true;
@@ -720,13 +722,13 @@ namespace GGPort {
 			reply.qualityReply.pong = msg.qualityReport.ping;
 			SendMsg(ref reply);
 
-			_remote_frame_advantage = msg.qualityReport.frameAdvantage;
+			remoteFrameAdvantage = msg.qualityReport.frameAdvantage;
 			
 			return true;
 		}
 
 		protected bool OnQualityReply(ref UDPMessage msg, int len) {
-			_round_trip_time = (int) (Platform.GetCurrentTimeMS() - msg.qualityReply.pong);
+			roundTripTime = (int) (Platform.GetCurrentTimeMS() - msg.qualityReply.pong);
 			
 			return true;
 		}
@@ -739,7 +741,7 @@ namespace GGPort {
 		public virtual bool OnMsgPoll(object TODO) { return true; }
 		public virtual bool OnPeriodicPoll(object TODO0, long TODO1) { return true; }
 		public virtual bool OnLoopPoll(object cookie) {
-			if (_udp == null) {
+			if (udp == null) {
 			   return true;
 			}
 
@@ -747,10 +749,10 @@ namespace GGPort {
 			uint next_interval;
 
 			PumpSendQueue();
-			switch (_current_state) {
+			switch (currentState) {
 				case State.Syncing:
-					next_interval = (_state.sync.roundtrips_remaining == NUM_SYNC_PACKETS) ? SYNC_FIRST_RETRY_INTERVAL : SYNC_RETRY_INTERVAL;
-					if (_last_send_time != 0 && _last_send_time + next_interval < now) {
+					next_interval = (state.sync.roundtrips_remaining == kNumSyncPackets) ? kSyncFirstRetryInterval : kSyncRetryInterval;
+					if (lastSendTime != 0 && lastSendTime + next_interval < now) {
 					   Log($"No luck syncing after {next_interval} ms... Re-queueing sync packet.{Environment.NewLine}");
 					   SendSyncRequest();
 					}
@@ -758,62 +760,62 @@ namespace GGPort {
 
 				case State.Running:
 					// xxx: rig all this up with a timer wrapper
-					if (_state.running.last_input_packet_recv_time == 0 || _state.running.last_input_packet_recv_time + RUNNING_RETRY_INTERVAL < now) {
-					   Log($"Haven't exchanged packets in a while (last received:{_last_received_input.frame}  last sent:{_last_sent_input.frame}).  Resending.{Environment.NewLine}");
+					if (state.running.last_input_packet_recv_time == 0 || state.running.last_input_packet_recv_time + kRunningRetryInterval < now) {
+					   Log($"Haven't exchanged packets in a while (last received:{lastReceivedInput.frame}  last sent:{lastSentInput.frame}).  Resending.{Environment.NewLine}");
 					   SendPendingOutput();
-					   _state.running.last_input_packet_recv_time = now;
+					   state.running.last_input_packet_recv_time = now;
 					}
 
-					if (_state.running.last_quality_report_time == 0 || _state.running.last_quality_report_time + QUALITY_REPORT_INTERVAL < now) {
+					if (state.running.last_quality_report_time == 0 || state.running.last_quality_report_time + kQualityReportInterval < now) {
 					   UDPMessage msg = new UDPMessage(UDPMessage.MsgType.QualityReport);
 					   msg.qualityReport.ping = Platform.GetCurrentTimeMS();
-					   msg.qualityReport.frameAdvantage = (sbyte) _local_frame_advantage;
+					   msg.qualityReport.frameAdvantage = (sbyte) localFrameAdvantage;
 					   SendMsg(ref msg);
-					   _state.running.last_quality_report_time = now;
+					   state.running.last_quality_report_time = now;
 					}
 
-					if (_state.running.last_network_stats_interval == 0 || _state.running.last_network_stats_interval + NETWORK_STATS_INTERVAL < now) {
+					if (state.running.last_network_stats_interval == 0 || state.running.last_network_stats_interval + kNetworkStatsInterval < now) {
 					   UpdateNetworkStats();
-					   _state.running.last_network_stats_interval = now;
+					   state.running.last_network_stats_interval = now;
 					}
 
-					if (_last_send_time != 0 && _last_send_time + KEEP_ALIVE_INTERVAL < now) {
+					if (lastSendTime != 0 && lastSendTime + kKeepAliveInterval < now) {
 					   Log($"Sending keep alive packet{Environment.NewLine}");
 
 					   UDPMessage udpMsg = new UDPMessage(UDPMessage.MsgType.KeepAlive);
 					   SendMsg(ref udpMsg); // TODO ref is unnecessary?
 					}
 
-					if (_disconnect_timeout != 0 && _disconnect_notify_start != 0 && 
-					   !_disconnect_notify_sent && (_last_recv_time + _disconnect_notify_start < now)) {
+					if (disconnectTimeout != 0 && disconnectNotifyStart != 0 && 
+					   !disconnectNotifySent && (lastReceiveTime + disconnectNotifyStart < now)) {
 						
-					   Log($"Endpoint has stopped receiving packets for {_disconnect_notify_start} ms.  Sending notification.{Environment.NewLine}");
+					   Log($"Endpoint has stopped receiving packets for {disconnectNotifyStart} ms.  Sending notification.{Environment.NewLine}");
 					   Event e = new Event(Event.Type.NetworkInterrupted) {
 						   network_interrupted = {
-							   disconnect_timeout = (int) (_disconnect_timeout - _disconnect_notify_start)
+							   disconnect_timeout = (int) (disconnectTimeout - disconnectNotifyStart)
 						   }
 					   };
 					   
 					   QueueEvent(ref e);
-					   _disconnect_notify_sent = true;
+					   disconnectNotifySent = true;
 					}
 
-					if (_disconnect_timeout != 0 && (_last_recv_time + _disconnect_timeout < now)) {
-					   if (!_disconnect_event_sent) {
-					      Log($"Endpoint has stopped receiving packets for {_disconnect_timeout} ms.  Disconnecting.{Environment.NewLine}");
+					if (disconnectTimeout != 0 && (lastReceiveTime + disconnectTimeout < now)) {
+					   if (!disconnectEventSent) {
+					      Log($"Endpoint has stopped receiving packets for {disconnectTimeout} ms.  Disconnecting.{Environment.NewLine}");
 					      
 					      Event evt = new Event(Event.Type.Disconnected);
 					      QueueEvent(ref evt); // TODO ref is unnecessary?
-					      _disconnect_event_sent = true;
+					      disconnectEventSent = true;
 					   }
 					}
 					break;
 
 				case State.Disconnected:
-				   if (_shutdown_timeout < now) {
+				   if (shutdownTimeout < now) {
 				      Log($"Shutting down udp connection.{Environment.NewLine}");
-				      _udp = null;
-				      _shutdown_timeout = 0;
+				      udp = null;
+				      shutdownTimeout = 0;
 				   }
 				   
 				   break;

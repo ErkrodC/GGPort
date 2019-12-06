@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Runtime.InteropServices;
 
+// TODO make game state params determinable with generic type param
 namespace GGPort {
 	public static class Types {
 		public const int kMaxPlayers = 4;
@@ -196,7 +197,7 @@ namespace GGPort {
 		* length into the *len parameter.  Optionally, the client can compute
 		* a checksum of the data and store it in the *checksum argument.
 		*/
-		public delegate bool SaveGameStateDelegate(ref byte[] buffer, ref int len, ref int checksum, int frame);
+		public delegate bool SaveGameStateDelegate(out object gameState, out int checksum, int frame);
 
 		public SaveGameStateDelegate SaveGameState { get; set; }
 
@@ -207,16 +208,16 @@ namespace GGPort {
 		* should make the current game state match the state contained in the
 		* buffer.
 		*/
-		public delegate bool LoadGameStateDelegate(byte[] buffer);
+		public delegate bool LoadGameStateDelegate(object gameState);
 
 		public LoadGameStateDelegate LoadGameState { get; set; }
 
 		/*
 		* log_game_state - Used in diagnostic testing.  The client should use
 		* the ggpo_log function to write the contents of the specified save
-		* state in a human readible form.
+		* state in a human readable form.
 		*/
-		public delegate bool LogGameStateDelegate(string filename, byte[] buffer, int len);
+		public delegate bool LogGameStateDelegate(string filename, object gameState);
 
 		public LogGameStateDelegate LogGameState { get; set; }
 
@@ -224,7 +225,7 @@ namespace GGPort {
 		* free_buffer - Frees a game state allocated in save_game_state.  You
 		* should deallocate the memory contained in the buffer.
 		*/
-		public delegate void FreeBufferDelegate(byte[] buffer);
+		public delegate void FreeBufferDelegate(object gameState);
 
 		public FreeBufferDelegate FreeBuffer { get; set; }
 

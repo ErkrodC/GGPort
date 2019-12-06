@@ -66,8 +66,8 @@ namespace GGPort {
 		}
 
 		~Sync() {
-			for (int i = 0; i < savedState.frames.Length; i++) {
-				Callbacks.FreeBuffer(savedState.frames[i].buf);
+			for (int i = 0; i < savedState.Frames.Length; i++) {
+				Callbacks.FreeBuffer(savedState.Frames[i].GameState);
 			}
 
 			InputQueues = null;
@@ -232,22 +232,19 @@ namespace GGPort {
 		//friend SyncTestBackend;
 
 		public struct SavedFrame {
-			public byte[] buf;
-			public int cbuf;
-			public int frame { get; set; }
-			public int checksum;
+			public object GameState;
+			public int Frame { get; set; }
+			public int Checksum;
 
-			private SavedFrame(byte[] buf, int cbuf, int frame, int checksum) {
-				this.buf = buf;
-				this.cbuf = cbuf;
-				this.frame = frame;
-				this.checksum = checksum;
+			private SavedFrame(object gameState, int frame, int checksum) {
+				GameState = gameState;
+				Frame = frame;
+				Checksum = checksum;
 			}
 
 			public static SavedFrame CreateDefault() {
 				return new SavedFrame(
 					null,
-					0,
 					-1,
 					0
 				);
@@ -255,12 +252,12 @@ namespace GGPort {
 		};
 		
 		protected struct SavedState {
-			public readonly SavedFrame[] frames;
-			public int head { get; set; }
+			public readonly SavedFrame[] Frames;
+			public int Head { get; set; }
 
 			public SavedState(int head) : this() {
-				frames = new SavedFrame[kMaxPredictionFrames + 2];
-				this.head = head;
+				Frames = new SavedFrame[kMaxPredictionFrames + 2];
+				Head = head;
 			}
 		};
 
@@ -272,21 +269,21 @@ namespace GGPort {
 			}
 
 			// Move the head pointer back and load it up
-			savedState.head = FindSavedFrameIndex(frame);
-			SavedFrame state = savedState.frames[savedState.head];
+			savedState.Head = FindSavedFrameIndex(frame);
+			SavedFrame savedFrame = savedState.Frames[savedState.Head];
 
-			LogUtil.Log($"=== Loading frame info {state.frame} (size: {state.cbuf}  checksum: {state.checksum:x8}).{Environment.NewLine}");
+			LogUtil.Log($"=== Loading frame info {savedFrame.Frame} (checksum: {savedFrame.Checksum:x8}).{Environment.NewLine}");
 
-			if (state.buf == null || state.cbuf == 0) {
-				throw new ArgumentException();
+			if (savedFrame.GameState == null) {
+				throw new ArgumentException($"{nameof(savedFrame.GameState)} inside {nameof(SavedFrame)} was null and cannot be restored.");
 			}
 			
-			Callbacks.LoadGameState(state.buf);
+			Callbacks.LoadGameState(savedFrame.GameState);
 
 			// Reset framecount and the head of the state ring-buffer to point in
 			// advance of the current frame (as if we had just finished executing it).
-			FrameCount = state.frame;
-			savedState.head = (savedState.head + 1) % savedState.frames.Length;
+			FrameCount = savedFrame.Frame;
+			savedState.Head = (savedState.Head + 1) % savedState.Frames.Length;
 		}
 
 
@@ -295,37 +292,40 @@ namespace GGPort {
 			* See StateCompress for the real save feature implemented by FinalBurn.
 			* Write everything into the head, then advance the head pointer.
 			*/
-			SavedFrame state = savedState.frames[savedState.head];
-			if (state.buf != null) {
-				Callbacks.FreeBuffer(state.buf);
-				state.buf = null;
+			SavedFrame savedFrame = savedState.Frames[savedState.Head];
+			if (savedFrame.GameState != null) {
+				Callbacks.FreeBuffer(savedFrame.GameState);
+				savedFrame.GameState = null;
 			}
-			state.frame = FrameCount;
-			Callbacks.SaveGameState(ref state.buf, ref state.cbuf, ref state.checksum, state.frame);
+			
+			savedFrame.Frame = FrameCount;
+			Callbacks.SaveGameState(out savedFrame.GameState, out savedFrame.Checksum, savedFrame.Frame);
 
-			LogUtil.Log($"=== Saved frame info {state.frame} (size: {state.cbuf}  checksum: {state.checksum:x8}).{Environment.NewLine}");
-			savedState.head = (savedState.head + 1) % savedState.frames.Length;
+			LogUtil.Log($"=== Saved frame info {savedFrame.Frame} (checksum: {savedFrame.Checksum:x8}).{Environment.NewLine}");
+			savedState.Head = (savedState.Head + 1) % savedState.Frames.Length;
 		}
 
 		protected int FindSavedFrameIndex(int frame) {
-			int i, count = savedState.frames.Length;
+			int i, count = savedState.Frames.Length;
 			for (i = 0; i < count; i++) {
-				if (savedState.frames[i].frame == frame) {
+				if (savedState.Frames[i].Frame == frame) {
 					break;
 				}
 			}
+			
 			if (i == count) {
 				throw new ArgumentException();
 			}
+			
 			return i;
 		}
 
 		public SavedFrame GetLastSavedFrame() {
-			int i = savedState.head - 1;
+			int i = savedState.Head - 1;
 			if (i < 0) {
-				i = savedState.frames.Length - 1;
+				i = savedState.Frames.Length - 1;
 			}
-			return savedState.frames[i];
+			return savedState.Frames[i];
 		}
 
 		protected bool CreateQueues(ref Config config) {

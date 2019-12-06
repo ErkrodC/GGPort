@@ -18,42 +18,42 @@ namespace GGPort {
 		public const int MAX_UDP_PACKET_SIZE = 4096;
 		
 		// Network transmission information
-		protected Socket _socket;
+		protected Socket socket;
 
 		// state management
-		protected Callbacks _callbacks;
-		protected Poll _poll;
+		protected Callbacks callbacks;
+		protected Poll poll;
 
 		protected static void Log(string msg) {
 			
 		}
 
 		public UDP() {
-			_socket = null;
-			_callbacks = null;
+			socket = null;
+			callbacks = null;
 		}
 
 		~UDP() {
-			if (_socket != null) {
-				_socket.Close();
-				_socket = null;
+			if (socket != null) {
+				socket.Close();
+				socket = null;
 			}
 		}
 
 		public void Init(ushort port, ref Poll poll, Callbacks callbacks) {
-			_callbacks = callbacks;
+			this.callbacks = callbacks;
 
-			_poll = poll;
-			_poll.RegisterLoop(this);
+			this.poll = poll;
+			this.poll.RegisterLoop(this);
 
 			Log($"binding udp socket to port {port}.{Environment.NewLine}");
-			_socket = CreateSocket(port, 0);
+			socket = CreateSocket(port, 0);
 		}
 	   
 		public void SendTo(byte[] buffer, int len, SocketFlags flags, IPEndPoint dst) {
 
 			try {
-				int res = _socket.SendTo(buffer, len, flags, dst);
+				int res = socket.SendTo(buffer, len, flags, dst);
 				Log($"sent packet length {len} to {dst.Address}:{dst.Port} (ret:{res}).{Environment.NewLine}");
 			} catch (Exception e) {
 				Log($"{e.Message}.{Environment.NewLine}");
@@ -68,17 +68,17 @@ namespace GGPort {
 			
 			for (;;) {
 				try {
-					if (_socket.Available <= 0) {
+					if (socket.Available <= 0) {
 						break;
 					}
-					int len = _socket.ReceiveFrom(recv_buf, MAX_UDP_PACKET_SIZE, SocketFlags.None, ref recv_addr);
+					int len = socket.ReceiveFrom(recv_buf, MAX_UDP_PACKET_SIZE, SocketFlags.None, ref recv_addr);
 
 					if (recv_addr is IPEndPoint recvAddrIP) {
 						Log($"recvfrom returned (len:{len}  from:{recvAddrIP.Address}:{recvAddrIP.Port}).{Environment.NewLine}");
 						IFormatter br = new BinaryFormatter();
 						using (MemoryStream ms = new MemoryStream(recv_buf)) {
 							UDPMessage msg = (UDPMessage) br.Deserialize(ms); // TODO deserialization probably doesn't work? why does it work for syncing but not input?
-							_callbacks.OnMsg(recvAddrIP, ref msg, len);
+							callbacks.OnMsg(recvAddrIP, ref msg, len);
 						} // TODO optimize refactor
 					} else {
 						throw new ArgumentException("Was expecting IPEndPoint. You added this check..."); // TODO remove?

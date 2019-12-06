@@ -15,7 +15,7 @@ namespace VectorWar {
 		private const int kFrameDelay = 2;
 		private const int kMaxPlayers = 64;
 
-		private static readonly GameState GameState = new GameState();
+		private static GameState GameState = new GameState();
 		private static readonly NonGameState NonGameState = new NonGameState();
 		private static Session session = null;
 		private static RendererWrapper renderer = RendererWrapper.instance;
@@ -351,8 +351,8 @@ namespace VectorWar {
 		}
 		
 		// Makes our current state match the state passed in by GGPO.
-		public static bool LoadGameState(byte[] buffer) {
-			GameState.Deserialize(buffer);
+		public static bool LoadGameState(object gameState) {
+			GameState = gameState as GameState;
 			return true;
 		}
 		
@@ -360,24 +360,24 @@ namespace VectorWar {
 		* Save the current state to a buffer and return it to GGPO via the
 		* buffer and len parameters.
 		*/
-		public static bool SaveGameState(ref byte[] buffer, ref int len, ref int checksum, int frame) {
-			len = GameState.Size();
-			GameState.Serialize(len, out buffer);
+		public static bool SaveGameState(out object gameState, out int checksum, int frame) {
+			gameState = GameState;
+			GameState.Serialize(GameState.Size(), out byte[] buffer); // TODO probably a better way to get the checksum.
 			checksum = Fletcher32Checksum(buffer);
 			return true;
 		}
 		
 		// Log the game state.  Used by the sync test debugging tool.
-		public static bool LogGameState(string filename, byte[] buffer, int len) {
+		public static bool LogGameState(string filename, object gameState) {
 			FileStream fp = File.Open(filename, FileMode.OpenOrCreate, FileAccess.Write);
 
-			GameState gamestate = new GameState(buffer);
+			GameState castedGameState = gameState as GameState;
 			StringBuilder stringBuilder = new StringBuilder($"GameState object.{Environment.NewLine}");
-			stringBuilder.Append($"  bounds: {gamestate._bounds.xMin},{gamestate._bounds.yMin} x {gamestate._bounds.xMax},{gamestate._bounds.yMax}.{Environment.NewLine}");
-			stringBuilder.Append($"  num_ships: {gamestate._num_ships}.{Environment.NewLine}");
+			stringBuilder.Append($"  bounds: {castedGameState._bounds.xMin},{castedGameState._bounds.yMin} x {castedGameState._bounds.xMax},{castedGameState._bounds.yMax}.{Environment.NewLine}");
+			stringBuilder.Append($"  num_ships: {castedGameState._num_ships}.{Environment.NewLine}");
 			
-			for (int i = 0; i < gamestate._num_ships; i++) {
-				Ship ship = gamestate._ships[i];
+			for (int i = 0; i < castedGameState._num_ships; i++) {
+				Ship ship = castedGameState._ships[i];
 				
 				stringBuilder.Append($"  ship {i} position:  {ship.position.x:F4}, {ship.position.y:F4}{Environment.NewLine}");
 				stringBuilder.Append($"  ship {i} velocity:  {ship.deltaVelocity.x:F4}, {ship.deltaVelocity.y:F4}{Environment.NewLine}");
@@ -401,7 +401,7 @@ namespace VectorWar {
 		}
 		
 		// Free a save state buffer previously returned in vw_save_game_state_callback.
-		public static void FreeBuffer(byte[] buffer) {
+		public static void FreeBuffer(object gameState) {
 			//free(buffer); // NOTE nothing for managed lang, though could prove useful nonetheless.
 		}
 		
