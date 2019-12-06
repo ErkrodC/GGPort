@@ -144,9 +144,9 @@ namespace VectorWar {
 
 			// update the checksums to display in the top of the window.  this
 			// helps to detect desyncs.
-			NonGameState.now.framenumber = GameState._framenumber;
+			NonGameState.now.framenumber = GameState.FrameNumber;
 			NonGameState.now.checksum = Fletcher32Checksum(GameState.Serialize());
-			if (GameState._framenumber % 90 == 0) {
+			if (GameState.FrameNumber % 90 == 0) {
 				NonGameState.periodic = NonGameState.now;
 			}
 
@@ -373,14 +373,14 @@ namespace VectorWar {
 
 			GameState castedGameState = gameState as GameState;
 			StringBuilder stringBuilder = new StringBuilder($"GameState object.{Environment.NewLine}");
-			stringBuilder.Append($"  bounds: {castedGameState._bounds.xMin},{castedGameState._bounds.yMin} x {castedGameState._bounds.xMax},{castedGameState._bounds.yMax}.{Environment.NewLine}");
-			stringBuilder.Append($"  num_ships: {castedGameState._num_ships}.{Environment.NewLine}");
+			stringBuilder.Append($"  bounds: {castedGameState.Bounds.xMin},{castedGameState.Bounds.yMin} x {castedGameState.Bounds.xMax},{castedGameState.Bounds.yMax}.{Environment.NewLine}");
+			stringBuilder.Append($"  num_ships: {castedGameState.NumShips}.{Environment.NewLine}");
 			
-			for (int i = 0; i < castedGameState._num_ships; i++) {
-				Ship ship = castedGameState._ships[i];
+			for (int i = 0; i < castedGameState.NumShips; i++) {
+				Ship ship = castedGameState.Ships[i];
 				
 				stringBuilder.Append($"  ship {i} position:  {ship.position.x:F4}, {ship.position.y:F4}{Environment.NewLine}");
-				stringBuilder.Append($"  ship {i} velocity:  {ship.deltaVelocity.x:F4}, {ship.deltaVelocity.y:F4}{Environment.NewLine}");
+				stringBuilder.Append($"  ship {i} velocity:  {ship.velocity.x:F4}, {ship.velocity.y:F4}{Environment.NewLine}");
 				stringBuilder.Append($"  ship {i} radius:    {ship.radius}.{Environment.NewLine}");
 				stringBuilder.Append($"  ship {i} heading:   {ship.heading}.{Environment.NewLine}");
 				stringBuilder.Append($"  ship {i} health:    {ship.health}.{Environment.NewLine}");

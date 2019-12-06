@@ -10,7 +10,7 @@ namespace VectorWar {
 
 		public bool active;
 		public Vector2 position;
-		public Vector2 velocity; // TODO actually deltaVelocity
+		public Vector2 velocity;
 	}
 
 	[Serializable]

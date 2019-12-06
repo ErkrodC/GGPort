@@ -475,7 +475,7 @@ namespace GGPort {
 					// keep accumulating the minimum confirmed point for all n*n packets and
 					// throw away the rest.
 					if (endpoints[i].IsRunning()) {
-						bool connected = endpoints[i].GetPeerConnectStatus(queue, out int last_received); // TODO out param?
+						bool connected = endpoints[i].GetPeerConnectStatus(queue, out int last_received);
 
 						queue_connected = queue_connected && connected;
 						queue_min_confirmed = Math.Min(last_received, queue_min_confirmed);

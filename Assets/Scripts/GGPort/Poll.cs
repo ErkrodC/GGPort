@@ -13,7 +13,7 @@ namespace GGPort {
 		bool OnHandlePoll(object TODO); // TODO
 		bool OnMsgPoll(object TODO); // TODO
 		bool OnPeriodicPoll(object TODO0, long TODO1); // TODO
-		bool OnLoopPoll(object cookie); // TODO
+		bool OnLoopPoll(object cookie);
 	};
 
 	public class Poll {

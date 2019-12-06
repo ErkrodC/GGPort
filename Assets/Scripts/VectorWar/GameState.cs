@@ -17,11 +17,11 @@ namespace VectorWar {
 	public class GameState {
 		public const int MAX_SHIPS = 4;
 
-		public int _framenumber;
-		public Rect _bounds;
-		public int _num_ships;
-		public Ship[] _ships = new Ship[MAX_SHIPS]; // TODO ecgh
-		
+		public int FrameNumber;
+		public Rect Bounds;
+		public int NumShips;
+		public Ship[] Ships; // TODO ecgh
+
 		public GameState() { }
 
 		public GameState(byte[] buffer) {
@@ -33,46 +33,47 @@ namespace VectorWar {
 		*
 		* Initialize our game state.
 		*/
-		public void Init(int num_players) {
+		public void Init(int numPlayers) {
 			int i, w, h, r;
 
-			_bounds = new Rect(Screen.safeArea);
+			Bounds = new Rect(Screen.safeArea);
 
-			w = Convert.ToInt32(_bounds.xMax - _bounds.xMin); // NOTE possible source of non-determinism
-			h = Convert.ToInt32(_bounds.yMax - _bounds.yMin);
+			w = Convert.ToInt32(Bounds.xMax - Bounds.xMin); // NOTE possible source of non-determinism
+			h = Convert.ToInt32(Bounds.yMax - Bounds.yMin);
 			r = h / 4;
 
-			_framenumber = 0;
-			_num_ships = num_players;
-
-			for (int j = 0; j < _ships.Length; j++) { // TODO ecgh
-				_ships[j] = new Ship();
+			FrameNumber = 0;
+			NumShips = numPlayers;
+			
+			Ships = new Ship[MAX_SHIPS];
+			for (int j = 0; j < Ships.Length; j++) {
+				Ships[j] = new Ship();
 			}
 			
-			for (i = 0; i < _num_ships; i++) {
-				int heading = i * 360 / num_players;
+			for (i = 0; i < NumShips; i++) {
+				int heading = i * 360 / numPlayers;
 				double cost, sint, theta;
 
 				theta = heading * MathUtil.PI / 180;
 				cost = Math.Cos(theta);
 				sint = Math.Sin(theta);
 
-				_ships[i].position.x = (float) (w / 2 + r * cost); // NOTE possible source of non-determinism
-				_ships[i].position.y = (float) (h / 2 + r * sint); // NOTE possible source of non-determinism
-				_ships[i].heading = (heading + 180) % 360;
-				_ships[i].health = Ship.STARTING_HEALTH;
-				_ships[i].radius = Ship.SHIP_RADIUS;
+				Ships[i].position.x = (float) (w / 2 + r * cost); // NOTE possible source of non-determinism
+				Ships[i].position.y = (float) (h / 2 + r * sint); // NOTE possible source of non-determinism
+				Ships[i].heading = (heading + 180) % 360;
+				Ships[i].health = Ship.STARTING_HEALTH;
+				Ships[i].radius = Ship.SHIP_RADIUS;
 			}
 		}
 
 		public void GetShipAI(int i, out float heading, out float thrust, out int fire) {
-			heading = (_ships[i].heading + 5) % 360;
+			heading = (Ships[i].heading + 5) % 360;
 			thrust = 0;
 			fire = 0;
 		}
 
 		public void ParseShipInputs(int inputs, int i, out float heading, out float thrust, out int fire) {
-			Ship ship = _ships[i];
+			Ship ship = Ships[i];
 
 			LogUtil.Log($"parsing ship {i} inputs: {inputs}.{Environment.NewLine}");
 
@@ -95,8 +96,8 @@ namespace VectorWar {
 			fire = inputs & (int) VectorWar.Input.InputFire;
 		}
 
-		public void MoveShip(int which, float heading, float thrust, int fire) {
-			Ship ship = _ships[which];
+		public void MoveShip(int shipIndex, float heading, float thrust, int fire) {
+			Ship ship = Ships[shipIndex];
 
 			LogUtil.Log(
 				$"calculation of new ship coordinates: (thrust:{thrust:F4} heading:{heading:F4}).{Environment.NewLine}"
@@ -108,18 +109,15 @@ namespace VectorWar {
 				if (fire != 0) {
 					LogUtil.Log($"firing bullet.{Environment.NewLine}");
 					for (int i = 0; i < Ship.MAX_BULLETS; i++) {
-						float dx = (float) Math.Cos(
-							MathUtil.degtorad(ship.heading)
-						); // NOTE possible sources of non-determinism
+						float dx = (float) Math.Cos(MathUtil.degtorad(ship.heading)); // NOTE possible sources of non-determinism
 						float dy = (float) Math.Sin(MathUtil.degtorad(ship.heading));
 
 						if (!ship.bullets[i].active) {
 							ship.bullets[i].active = true;
-							ship.bullets[i].position.x =
-								ship.position.x + (ship.radius * dx); // NOTE possible sources of non-determinism
+							ship.bullets[i].position.x = ship.position.x + (ship.radius * dx); // NOTE possible sources of non-determinism
 							ship.bullets[i].position.y = ship.position.y + (ship.radius * dy);
-							ship.bullets[i].velocity.x = ship.deltaVelocity.x + (Bullet.BULLET_SPEED * dx);
-							ship.bullets[i].velocity.y = ship.deltaVelocity.y + (Bullet.BULLET_SPEED * dy);
+							ship.bullets[i].velocity.x = ship.velocity.x + (Bullet.BULLET_SPEED * dx);
+							ship.bullets[i].velocity.y = ship.velocity.y + (Bullet.BULLET_SPEED * dy);
 							ship.cooldown = Bullet.BULLET_COOLDOWN;
 							break;
 						}
@@ -128,41 +126,40 @@ namespace VectorWar {
 			}
 
 			if (!MathUtil.Equals0(thrust)) {
-				float dx = (float) (thrust
-				                    * Math.Cos(MathUtil.degtorad(heading))); // NOTE possible sources of non-determinism
+				float dx = (float) (thrust * Math.Cos(MathUtil.degtorad(heading))); // NOTE possible sources of non-determinism
 				float dy = (float) (thrust * Math.Sin(MathUtil.degtorad(heading)));
 
-				ship.deltaVelocity.x += dx;
-				ship.deltaVelocity.y += dy;
+				ship.velocity.x += dx;
+				ship.velocity.y += dy;
 				float mag = (float) Math.Sqrt(
-					ship.deltaVelocity.x * ship.deltaVelocity.x + ship.deltaVelocity.y * ship.deltaVelocity.y
+					ship.velocity.x * ship.velocity.x + ship.velocity.y * ship.velocity.y
 				); // NOTE possible source of non-determinism
 				if (mag > Ship.SHIP_MAX_THRUST) {
-					ship.deltaVelocity.x = (ship.deltaVelocity.x * Ship.SHIP_MAX_THRUST) / mag;
-					ship.deltaVelocity.y = (ship.deltaVelocity.y * Ship.SHIP_MAX_THRUST) / mag;
+					ship.velocity.x = (ship.velocity.x * Ship.SHIP_MAX_THRUST) / mag;
+					ship.velocity.y = (ship.velocity.y * Ship.SHIP_MAX_THRUST) / mag;
 				}
 			}
 
 			LogUtil.Log(
-				$"new ship velocity: (dx:{ship.deltaVelocity.x:F4} dy:{ship.deltaVelocity.y:F4}).{Environment.NewLine}"
+				$"new ship velocity: (dx:{ship.velocity.x:F4} dy:{ship.velocity.y:F4}).{Environment.NewLine}"
 			);
 
-			ship.position.x += ship.deltaVelocity.x;
-			ship.position.y += ship.deltaVelocity.y;
+			ship.position.x += ship.velocity.x;
+			ship.position.y += ship.velocity.y;
 			LogUtil.Log(
 				$"new ship position: (dx:{ship.position.x:F4} dy:{ship.position.y:F4}).{Environment.NewLine}"
 			);
 
 			// TODO this might not work as expected, bouncing of screen bounds
-			if (ship.position.x - ship.radius < _bounds.xMin || ship.position.x + ship.radius > _bounds.xMax) {
-				ship.deltaVelocity.x *= -1; // XXX Divergence by multiplicative factor
-				ship.position.x += ship.deltaVelocity.x * 2;
+			if (ship.position.x - ship.radius < Bounds.xMin || ship.position.x + ship.radius > Bounds.xMax) {
+				ship.velocity.x *= -1; // XXX Divergence by multiplicative factor
+				ship.position.x += ship.velocity.x * 2;
 			}
 
 			// TODO same
-			if (ship.position.y - ship.radius < _bounds.yMin || ship.position.y + ship.radius > _bounds.yMax) {
-				ship.deltaVelocity.y *= -1; // XXX Divergence by multiplicative factor 
-				ship.position.y += ship.deltaVelocity.y * 2;
+			if (ship.position.y - ship.radius < Bounds.yMin || ship.position.y + ship.radius > Bounds.yMax) {
+				ship.velocity.y *= -1; // XXX Divergence by multiplicative factor 
+				ship.position.y += ship.velocity.y * 2;
 			}
 
 			// TODO again
@@ -174,14 +171,14 @@ namespace VectorWar {
 					bullet.position.y += bullet.velocity.y;
 
 					// TODO could use .Within()
-					if (bullet.position.x < _bounds.xMin
-					    || bullet.position.y < _bounds.yMin
-					    || bullet.position.x > _bounds.xMax
-					    || bullet.position.y > _bounds.yMax) {
+					if (bullet.position.x < Bounds.xMin
+					    || bullet.position.y < Bounds.yMin
+					    || bullet.position.x > Bounds.xMax
+					    || bullet.position.y > Bounds.yMax) {
 						bullet.active = false;
 					} else {
-						for (int j = 0; j < _num_ships; j++) {
-							Ship other = _ships[j];
+						for (int j = 0; j < NumShips; j++) {
+							Ship other = Ships[j];
 							if (Vector2.Distance(bullet.position, other.position) < other.radius) {
 								ship.score++;
 								other.health -= Bullet.BULLET_DAMAGE;
@@ -195,14 +192,14 @@ namespace VectorWar {
 		}
 
 		// NOTE called in VectorWar_AdvanceFrame, which is ggpo's advance_frame callback
-		public void Update(int[] inputs, int disconnect_flags) {
-			_framenumber++;
-			for (int i = 0; i < _num_ships; i++) {
+		public void Update(int[] inputs, int disconnectFlags) {
+			FrameNumber++;
+			for (int i = 0; i < NumShips; i++) {
 				float thrust;
 				float heading;
 				int fire;
 
-				if ((disconnect_flags & (1 << i)) != 0) {
+				if ((disconnectFlags & (1 << i)) != 0) {
 					GetShipAI(i, out heading, out thrust, out fire);
 				} else {
 					ParseShipInputs(inputs[i], i, out heading, out thrust, out fire);
@@ -210,23 +207,23 @@ namespace VectorWar {
 
 				MoveShip(i, heading, thrust, fire);
 
-				if (_ships[i].cooldown != 0) {
-					_ships[i].cooldown--;
+				if (Ships[i].cooldown != 0) {
+					Ships[i].cooldown--;
 				}
 			}
 		}
 
 		public void Deserialize(byte[] buffer) {
 			GameState deserializedGameState = DeserializeInternal(buffer);
-			_framenumber = deserializedGameState._framenumber;
-			_bounds = deserializedGameState._bounds;
-			_num_ships = deserializedGameState._num_ships;
+			FrameNumber = deserializedGameState.FrameNumber;
+			Bounds = deserializedGameState.Bounds;
+			NumShips = deserializedGameState.NumShips;
 
 			// TODO dont wanna create garbaj
-			_ships = new Ship[MAX_SHIPS];
+			Ships = new Ship[MAX_SHIPS];
 			for (int i = 0; i < MAX_SHIPS; i++) {
 				// TODO not sure this'll work, might wanna use json for the time being?
-				_ships[i] = deserializedGameState._ships[i];
+				Ships[i] = deserializedGameState.Ships[i];
 			}
 		}
 

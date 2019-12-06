@@ -197,8 +197,6 @@ namespace GGPort {
 					_host.SetLocalFrameNumber(input.frame);
 					_host.SendInputAck();
 					_inputs[input.frame % SPECTATOR_FRAME_BUFFER_SIZE] = input;
-
-					evt.input.input = input; // TODO necessary? I added this
 					break;
 				}
 			}

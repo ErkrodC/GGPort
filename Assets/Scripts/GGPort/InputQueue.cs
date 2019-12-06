@@ -254,10 +254,8 @@ namespace GGPort {
 				* left.
 				*/
 				Log($"Adding padding frame {expected_frame} to account for change in frame delay.{Environment.NewLine}");
-
-				// NOTE in c++, this was creating a reference to position in array, not declaring a new GameInput var, so pry not gonna work
-				GameInput last_frame = _inputs[PREVIOUS_FRAME(_head)];
-				AddDelayedInputToQueue(ref last_frame, expected_frame);
+				
+				AddDelayedInputToQueue(ref _inputs[PREVIOUS_FRAME(_head)], expected_frame);
 				expected_frame++;
 			}
 

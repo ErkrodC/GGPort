@@ -412,7 +412,7 @@ namespace GGPort {
 						throw new ArgumentException();
 					}
 					
-					BinaryFormatter formatter = new BinaryFormatter();
+					BinaryFormatter formatter = new BinaryFormatter(); // LOH relates to here as well
 					using (MemoryStream ms = new MemoryStream(entry.msg.PacketSize())) {
 						formatter.Serialize(ms, entry.msg);
 						udp.SendTo(ms.ToArray(), (int) ms.Length, 0, entry.dest_addr);
