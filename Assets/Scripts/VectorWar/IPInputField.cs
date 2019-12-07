@@ -8,6 +8,10 @@ public class IPInputField : MonoBehaviour {
 
 	private void Awake() {
 		fullAddressText = GetComponent<TMP_InputField>();
+
+#if !UNITY_EDITOR
+		fullAddressText.text = "127.0.0.1:5555";
+#endif
 	}
 
 	public IPEndPoint GetIPEndPoint() {

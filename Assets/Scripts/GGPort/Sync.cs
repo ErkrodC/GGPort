@@ -22,7 +22,7 @@ namespace GGPort {
 		
 		protected InputQueue[]     InputQueues;
 
-		protected RingBuffer<Event> EventQueue = new RingBuffer<Event>(32);
+		protected CircularQueue<Event> EventQueue = new CircularQueue<Event>(32);
 		protected UDPMessage.ConnectStatus[] LocalConnectStatuses;
 		
 		public struct Config {
@@ -219,9 +219,8 @@ namespace GGPort {
 		public bool InRollback() { return IsRollingBack; }
 
 		public bool GetEvent(out Event e) {
-			if (EventQueue.size() != 0) {
-				e = EventQueue.front();
-				EventQueue.pop();
+			if (EventQueue.Count != 0) {
+				e = EventQueue.Pop();
 				return true;
 			}
 

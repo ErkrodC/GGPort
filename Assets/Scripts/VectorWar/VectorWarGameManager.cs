@@ -57,6 +57,11 @@ namespace VectorWar {
 
 			hostIPText.gameObject.SetActive(spectateModeToggle.isOn);
 			spectateModeToggle.onValueChanged.AddListener(hostIPText.gameObject.SetActive);
+
+#if !UNITY_EDITOR
+			localPortText.text = "5556";
+#endif
+			playerConfs[0].IsLocal = true;
 		}
 
 		private void Update() {
@@ -101,7 +106,7 @@ namespace VectorWar {
 
 					PlayerConf playerConf = playerConfs[playerIndex];
 					
-					if (playerConf.IsLocal()) {
+					if (playerConf.IsLocal) {
 						players[playerIndex].Type = GGPOPlayerType.Local;
 					} else {
 						players[playerIndex].Type = GGPOPlayerType.Remote;

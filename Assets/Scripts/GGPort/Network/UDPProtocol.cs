@@ -35,7 +35,7 @@ namespace GGPort {
 		protected int sendLatency;
 		protected int oopPercent;
 		protected OOPacket ooPacket;
-		protected RingBuffer<QueueEntry> sendQueue = new RingBuffer<QueueEntry>(64);
+		protected CircularQueue<QueueEntry> sendQueue = new CircularQueue<QueueEntry>(64);
 		
 		// Stats
 		protected int roundTripTime;
@@ -55,7 +55,7 @@ namespace GGPort {
 		protected int remoteFrameAdvantage;
 
 		// Packet loss
-		protected RingBuffer<GameInput> pendingOutput = new RingBuffer<GameInput>(64);
+		protected CircularQueue<GameInput> pendingOutgoingInputs = new CircularQueue<GameInput>(64);
 		protected GameInput lastReceivedInput;
 		protected GameInput lastSentInput;
 		protected GameInput lastAckedInput;
@@ -74,7 +74,7 @@ namespace GGPort {
 		protected TimeSync timeSync = new TimeSync();
 
 		// Event queue
-		protected RingBuffer<Event> eventQueue = new RingBuffer<Event>(64);
+		protected CircularQueue<Event> eventQueue = new CircularQueue<Event>(64);
 		
 		// Message dispatch
 		private delegate bool DispatchFn(ref UDPMessage msg, int len);
@@ -180,7 +180,7 @@ namespace GGPort {
 				* (better, but still ug).  For the meantime, make this queue really big to decrease
 				* the odds of this happening...
 				*/
-				pendingOutput.push(input);
+				pendingOutgoingInputs.Push(input);
 			}
 				
 			SendPendingOutput();
@@ -243,20 +243,19 @@ namespace GGPort {
 
 		public void GetNetworkStats(ref NetworkStats stats) { // TODO cleaner to serve stats struct from here? to get out over ref
 			stats.network.Ping = roundTripTime;
-			stats.network.SendQueueLength = pendingOutput.size();
+			stats.network.SendQueueLength = pendingOutgoingInputs.Count;
 			stats.network.KbpsSent = kbpsSent;
 			stats.timeSync.RemoteFramesBehind = remoteFrameAdvantage;
 			stats.timeSync.LocalFramesBehind = localFrameAdvantage;
 		}
 
 		public bool GetEvent(out Event e) {
-			if (eventQueue.size() == 0) {
+			if (eventQueue.Count == 0) {
 				e = default;
 				return false;
 			}
-			
-			e = eventQueue.front();
-			eventQueue.pop();
+
+			e = eventQueue.Pop();
 			
 			return true;
 		}
@@ -310,13 +309,13 @@ namespace GGPort {
 
 		protected void QueueEvent(ref Event evt) {
 			LogEvent("Queuing event", evt);
-			eventQueue.push(evt);
+			eventQueue.Push(evt);
 		}
 
 		protected void ClearSendQueue() {
-			while (!sendQueue.empty()) {
-				sendQueue.front().msg = default;
-				sendQueue.pop();
+			while (sendQueue.Count > 0) {
+				sendQueue.Peek().msg = default;
+				sendQueue.Pop();
 			}
 		}
 
@@ -382,21 +381,21 @@ namespace GGPort {
 			msg.header.magic = magicNumber;
 			msg.header.SequenceNumber = nextSendSequenceNumber++;
 
-			sendQueue.push(new QueueEntry(Platform.GetCurrentTimeMS(), ref peerAddress, ref msg));
+			sendQueue.Push(new QueueEntry(Platform.GetCurrentTimeMS(), ref peerAddress, ref msg));
 			PumpSendQueue();
 		}
 
 		protected void PumpSendQueue() {
 			Random random = new Random(); // TODO pry move to more global scope...maybe?
-			while (!sendQueue.empty()) {
-				QueueEntry entry = sendQueue.front();
+			while (sendQueue.Count > 0 ) {
+				QueueEntry entry = sendQueue.Peek();
 
 				if (sendLatency != 0) {
 					// should really come up with a gaussian distributation based on the configured
 					// value, but this will do for now.
 					
 					int jitter = sendLatency * 2 / 3 + random.Next(0, ushort.MaxValue) % sendLatency / 3; // TODO cleanup rand
-					if (Platform.GetCurrentTimeMS() < sendQueue.front().queue_time + jitter) {
+					if (Platform.GetCurrentTimeMS() < sendQueue.Peek().queue_time + jitter) {
 						break;
 					}
 				}
@@ -421,7 +420,7 @@ namespace GGPort {
 					entry.msg = default;
 				}
 				
-				sendQueue.pop();
+				sendQueue.Pop();
 			}
 			if (ooPacket.msg != null && ooPacket.send_time < Platform.GetCurrentTimeMS()) {
 				Log("sending rogue oop!");
@@ -440,27 +439,24 @@ namespace GGPort {
 		// could possibly have to do with either input serialization and/or msg.input structure
 		protected unsafe void SendPendingOutput() {
 			UDPMessage msg = new UDPMessage(UDPMessage.MsgType.Input);
-			int i, j, offset = 0;
-			byte[] bits;
-			GameInput last;
+			int offset = 0;
 
-			if (pendingOutput.size() != 0) {
-				last = lastAckedInput;
-				bits = msg.input.bits;
+			if (pendingOutgoingInputs.Count != 0) {
+				GameInput last = lastAckedInput;
+				byte[] bits = msg.input.bits;
 
-				msg.input.startFrame = (uint) pendingOutput.front().frame;
-				msg.input.inputSize = (byte) pendingOutput.front().size;
+				GameInput outputQueueFront = pendingOutgoingInputs.Peek();
+				msg.input.startFrame = (uint) outputQueueFront.frame;
+				msg.input.inputSize = (byte) outputQueueFront.size;
 
 				if (!(last.frame == -1 || last.frame + 1 == msg.input.startFrame)) {
 					throw new ArgumentException();
 				}
 				
-				for (j = 0; j < pendingOutput.size(); j++) {
-					GameInput current = pendingOutput.item(j);
-
+				foreach (GameInput pendingInput in pendingOutgoingInputs) {
 					bool currentEqualsLastBits = true;
-					for (int k = 0; k < current.size; k++) {
-						if (current.bits[k] != last.bits[k]) {
+					for (int j = 0; j < pendingInput.size; j++) {
+						if (pendingInput.bits[j] != last.bits[j]) {
 							currentEqualsLastBits = false;
 							break;
 						}
@@ -470,27 +466,27 @@ namespace GGPort {
 						if (GameInput.kMaxBytes * GameInput.kMaxPlayers * 8 >= 1 << BitVector.BITVECTOR_NIBBLE_SIZE) {
 							throw new ArgumentException();
 						}
-						
-						for (i = 0; i < current.size * 8; i++) {
-							if (i >= 1 << BitVector.BITVECTOR_NIBBLE_SIZE) {
+
+						for (int j = 0; j < pendingInput.size * 8; j++) {
+							if (j >= 1 << BitVector.BITVECTOR_NIBBLE_SIZE) {
 								throw new ArgumentException();
 							}
 							
-							if (current.value(i) != last.value(i)) {
+							if (pendingInput.value(j) != last.value(j)) {
 								BitVector.SetBit(msg.input.bits, ref offset);
-								if (current.value(i)) {
+								if (pendingInput.value(j)) {
 									BitVector.SetBit(bits, ref offset);
 								} else {
 									BitVector.ClearBit(bits, ref offset);
 								}
 
-								BitVector.WriteNibblet(bits, i, ref offset);
+								BitVector.WriteNibblet(bits, j, ref offset);
 							}
 						}
 					}
 
 					BitVector.ClearBit(msg.input.bits, ref offset);
-					last = lastSentInput = current;
+					last = lastSentInput = pendingInput;
 				}
 			} else {
 				msg.input.startFrame = 0;
@@ -694,10 +690,9 @@ namespace GGPort {
 			/*
 			* Get rid of our buffered input
 			*/
-			while (pendingOutput.size() != 0 && pendingOutput.front().frame < msg.input.ackFrame) {
-				Log($"Throwing away pending output frame {pendingOutput.front().frame}{Environment.NewLine}");
-				lastAckedInput = pendingOutput.front();
-				pendingOutput.pop();
+			while (pendingOutgoingInputs.Count != 0 && pendingOutgoingInputs.Peek().frame < msg.input.ackFrame) {
+				Log($"Throwing away pending output frame {pendingOutgoingInputs.Peek().frame}{Environment.NewLine}");
+				lastAckedInput = pendingOutgoingInputs.Pop();
 			}
 
 			return true;
@@ -707,10 +702,9 @@ namespace GGPort {
 			/*
 			* Get rid of our buffered input
 			*/
-			while (pendingOutput.size() != 0 && pendingOutput.front().frame < msg.inputAck.ackFrame) {
-				Log($"Throwing away pending output frame {pendingOutput.front().frame}{Environment.NewLine}");
-				lastAckedInput = pendingOutput.front();
-				pendingOutput.pop();
+			while (pendingOutgoingInputs.Count != 0 && pendingOutgoingInputs.Peek().frame < msg.inputAck.ackFrame) {
+				Log($"Throwing away pending output frame {pendingOutgoingInputs.Peek().frame}{Environment.NewLine}");
+				lastAckedInput = pendingOutgoingInputs.Pop();
 			}
 			
 			return true;

@@ -18,7 +18,7 @@ namespace GGPort {
 		
 		protected GameInput                  _current_input;
 		protected GameInput                  _last_input;
-		protected RingBuffer<SavedInfo>  _saved_frames = new RingBuffer<SavedInfo>(32);
+		protected CircularQueue<SavedInfo>  _saved_frames = new CircularQueue<SavedInfo>(32);
 
 		public SyncTestBackend(ref SessionCallbacks cb, string gamename, int frames, int num_players) {
 			_sync = null;
@@ -87,7 +87,7 @@ namespace GGPort {
 			BeginLog(false);
 			
 			if (_rollingback) {
-				_last_input = _saved_frames.front().Input;
+				_last_input = _saved_frames.Peek().Input;
 			} else {
 				if (_sync.GetFrameCount() == 0) {
 					_sync.SaveCurrentFrame();
@@ -128,7 +128,7 @@ namespace GGPort {
 				_last_input
 			);
 			
-			_saved_frames.push(info);
+			_saved_frames.Push(info);
 
 			if (frame - _last_verified == _check_distance) {
 				// We've gone far enough ahead and should now start replaying frames.
@@ -136,13 +136,12 @@ namespace GGPort {
 				_sync.LoadFrame(_last_verified);
 
 				_rollingback = true;
-				while(!_saved_frames.empty()) {
+				while(_saved_frames.Count > 0) {
 					_callbacks.AdvanceFrame(0);
 
 					// Verify that the checksumn of this frame is the same as the one in our
 					// list.
-					info = _saved_frames.front();
-					_saved_frames.pop();
+					info = _saved_frames.Pop();
 
 					if (info.Frame != _sync.GetFrameCount()) {
 						RaiseSyncError("Frame number %d does not match saved frame number %d", info.Frame, frame);

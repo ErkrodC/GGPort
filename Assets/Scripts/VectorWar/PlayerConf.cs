@@ -13,8 +13,9 @@ public class PlayerConf : MonoBehaviour {
         localPlayerToggle.onValueChanged.AddListener(value => ipInputField.gameObject.SetActive(!value));
     }
 
-    public bool IsLocal() {
-        return localPlayerToggle.isOn;
+    public bool IsLocal {
+        get => localPlayerToggle.isOn;
+        set => localPlayerToggle.isOn = value;
     }
 
     public IPEndPoint GetIPEndPoint() {
