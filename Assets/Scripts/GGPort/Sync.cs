@@ -109,7 +109,7 @@ namespace GGPort {
 			}
 
 			LogUtil.Log($"Sending undelayed local frame {FrameCount} to queue {queue}.{Environment.NewLine}");
-			input.frame = FrameCount;
+			input.Frame = FrameCount;
 			InputQueues[queue].AddInput(ref input);
 
 			return true;
@@ -120,11 +120,9 @@ namespace GGPort {
 		}
 
 		public unsafe int GetConfirmedInputs(byte* values, int size, int frame) {
-			int disconnect_flags = 0;
+			int disconnectFlags = 0;
 
-			if (size < config.NumPlayers * config.InputSize) {
-				throw new ArgumentException();
-			}
+			Platform.Assert(size >= config.NumPlayers * config.InputSize);
 
 			for (int i = 0; i < size; i++) {
 				values[i] = 0;
@@ -133,27 +131,25 @@ namespace GGPort {
 			for (int i = 0; i < config.NumPlayers; i++) {
 				GameInput input = new GameInput();
 				if (LocalConnectStatuses[i].IsDisconnected && frame > LocalConnectStatuses[i].LastFrame) {
-					disconnect_flags |= (1 << i);
-					input.erase();
+					disconnectFlags |= (1 << i);
+					input.Erase();
 				} else {
 					InputQueues[i].GetConfirmedInput(frame, out input);
 				}
 
 				int startingByteIndex = i * config.InputSize;
 				for (int j = 0; j < config.InputSize; j++) {
-					values[startingByteIndex + j] = input.bits[j];
+					values[startingByteIndex + j] = input.Bits[j];
 				}
 			}
-			return disconnect_flags;
+			return disconnectFlags;
 		}
 
 		public unsafe int SynchronizeInputs(ref Array values, int size) {
-			int disconnect_flags = 0;
-			//char *output = (char *)values;
+			int disconnectFlags = 0;
+			//char *output = (char *)values; // TODO
 
-			if (size < config.NumPlayers * config.InputSize) {
-				throw new ArgumentException();
-			}
+			Platform.Assert(size >= config.NumPlayers * config.InputSize);
 			
 			for (int i = 0; i < size; i++) {
 				Buffer.SetByte(values, i, 0);
@@ -162,38 +158,36 @@ namespace GGPort {
 			for (int i = 0; i < config.NumPlayers; i++) {
 				GameInput input = new GameInput();
 				if (LocalConnectStatuses[i].IsDisconnected && FrameCount > LocalConnectStatuses[i].LastFrame) {
-					disconnect_flags |= (1 << i);
-					input.erase();
+					disconnectFlags |= (1 << i);
+					input.Erase();
 				} else {
 					InputQueues[i].GetInput(FrameCount, out input);
 				}
 				
 				int startingByteIndex = i * config.InputSize;
 				for (int j = 0; j < config.InputSize; j++) {
-					Buffer.SetByte(values, startingByteIndex + j, input.bits[j]);
+					Buffer.SetByte(values, startingByteIndex + j, input.Bits[j]);
 				}
 			}
-			return disconnect_flags;
+			return disconnectFlags;
 		}
 
 		public void CheckSimulation(int timeout) {
-			if (!CheckSimulationConsistency(out int seek_to)) {
-				AdjustSimulation(seek_to);
+			if (!CheckSimulationConsistency(out int seekTo)) {
+				AdjustSimulation(seekTo);
 			}
 		}
 
-		public void AdjustSimulation(int seek_to) {
-			int framecount = FrameCount;
-			int count = FrameCount - seek_to;
+		public void AdjustSimulation(int seekTo) {
+			int frameCount = FrameCount;
+			int count = FrameCount - seekTo;
 
 			LogUtil.Log($"Catching up{Environment.NewLine}");
 			IsRollingBack = true;
 
 			// Flush our input queue and load the last frame.
-			LoadFrame(seek_to);
-			if (FrameCount != seek_to) {
-				throw new ArgumentException();
-			}
+			LoadFrame(seekTo);
+			Platform.Assert(FrameCount == seekTo);
 
 			// Advance frame by frame (stuffing notifications back to the master).
 			ResetPrediction(FrameCount);
@@ -201,9 +195,7 @@ namespace GGPort {
 				Callbacks.AdvanceFrame(0);
 			}
 
-			if (FrameCount != framecount) {
-				throw new ArgumentException();
-			}
+			Platform.Assert(FrameCount == frameCount);
 
 			IsRollingBack = false;
 
@@ -228,7 +220,7 @@ namespace GGPort {
 			return false;
 		}
 		
-		//friend SyncTestBackend;
+		//friend SyncTestBackend; // TODO
 
 		public struct SavedFrame {
 			public object GameState;
@@ -273,19 +265,19 @@ namespace GGPort {
 
 			LogUtil.Log($"=== Loading frame info {savedFrame.Frame} (checksum: {savedFrame.Checksum:x8}).{Environment.NewLine}");
 
-			if (savedFrame.GameState == null) {
-				throw new ArgumentException($"{nameof(savedFrame.GameState)} inside {nameof(SavedFrame)} was null and cannot be restored.");
-			}
+			Platform.Assert(
+				savedFrame.GameState != null,
+				$"{nameof(savedFrame.GameState)} inside {nameof(SavedFrame)} was null and cannot be restored."
+			);
 			
 			Callbacks.LoadGameState(savedFrame.GameState);
 
-			// Reset framecount and the head of the state ring-buffer to point in
+			// Reset frameCount and the head of the state ring-buffer to point in
 			// advance of the current frame (as if we had just finished executing it).
 			FrameCount = savedFrame.Frame;
 			savedState.Head = (savedState.Head + 1) % savedState.Frames.Length;
 		}
-
-
+		
 		public void SaveCurrentFrame() {
 			/*
 			* See StateCompress for the real save feature implemented by FinalBurn.
@@ -311,10 +303,8 @@ namespace GGPort {
 					break;
 				}
 			}
-			
-			if (i == count) {
-				throw new ArgumentException();
-			}
+
+			Platform.Assert(i != count);
 			
 			return i;
 		}
@@ -340,22 +330,22 @@ namespace GGPort {
 		}
 
 		protected bool CheckSimulationConsistency(out int seekTo) {
-			int first_incorrect = GameInput.kNullFrame;
+			int firstIncorrect = GameInput.kNullFrame;
 			for (int i = 0; i < config.NumPlayers; i++) {
 				int incorrect = InputQueues[i].GetFirstIncorrectFrame();
 				LogUtil.Log($"considering incorrect frame {incorrect} reported by queue {i}.{Environment.NewLine}");
 
-				if (incorrect != GameInput.kNullFrame && (first_incorrect == GameInput.kNullFrame || incorrect < first_incorrect)) {
-					first_incorrect = incorrect;
+				if (incorrect != GameInput.kNullFrame && (firstIncorrect == GameInput.kNullFrame || incorrect < firstIncorrect)) {
+					firstIncorrect = incorrect;
 				}
 			}
 
-			if (first_incorrect == GameInput.kNullFrame) {
+			if (firstIncorrect == GameInput.kNullFrame) {
 				LogUtil.Log($"prediction ok.  proceeding.{Environment.NewLine}");
 				seekTo = -1;
 				return true;
 			}
-			seekTo = first_incorrect;
+			seekTo = firstIncorrect;
 			return false;
 		}
 

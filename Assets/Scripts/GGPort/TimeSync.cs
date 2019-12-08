@@ -32,9 +32,9 @@ namespace GGPort {
 
 		public void advance_frame(ref GameInput input, int advantage, int radvantage) {
 			// Remember the last frame and frame advantage
-			_last_inputs[input.frame % _last_inputs.Length] = input;
-			_local[input.frame % _local.Length] = advantage;
-			_remote[input.frame % _remote.Length] = radvantage;
+			_last_inputs[input.Frame % _last_inputs.Length] = input;
+			_local[input.Frame % _local.Length] = advantage;
+			_remote[input.Frame % _remote.Length] = radvantage;
 		}
 
 		public int recommend_frame_wait_duration(bool require_idle_input) {
@@ -76,7 +76,7 @@ namespace GGPort {
 			// Street Fighter), which could cause the player to miss moves.
 			if (require_idle_input) {
 				for (i = 1; i < _last_inputs.Length; i++) {
-					if (!_last_inputs[i].equal(ref _last_inputs[0], true)) {
+					if (!_last_inputs[i].Equal(ref _last_inputs[0], true)) {
 						LogUtil.Log($"iteration {count}:  rejecting due to input stuff at position {i}...!!!{Environment.NewLine}");
 						return 0;
 					}

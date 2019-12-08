@@ -38,7 +38,7 @@ namespace GGPort {
 			_synchronizing = true;
 
 			for (int i = 0; i < _inputs.Length; i++) {
-				_inputs[i].frame = -1;
+				_inputs[i].Frame = -1;
 			}
 
 			// Initialize the UDP port
@@ -75,21 +75,21 @@ namespace GGPort {
 			}
 
 			GameInput input = _inputs[_next_input_to_send % SPECTATOR_FRAME_BUFFER_SIZE];
-			if (input.frame < _next_input_to_send) {
+			if (input.Frame < _next_input_to_send) {
 				// Haven't received the input from the host yet.  Wait
 				return ErrorCode.PredictionThreshold;
 			}
-			if (input.frame > _next_input_to_send) {
+			if (input.Frame > _next_input_to_send) {
 				// The host is way way way far ahead of the spectator.  How'd this
 				// happen?  Anyway, the input we need is gone forever.
 				return ErrorCode.GeneralFailure;
 			}
 
-			Platform.ASSERT(size >= _input_size * _num_players);
+			Platform.Assert(size >= _input_size * _num_players);
 
 			int valuesSizeInBytes = _input_size * _num_players;
 			for (int i = 0; i < valuesSizeInBytes; i++) {
-				Buffer.SetByte(values, i, input.bits[i]);
+				Buffer.SetByte(values, i, input.Bits[i]);
 			}
 			
 			disconnectFlags = 0; // xxx: should get them from the host!
@@ -194,9 +194,9 @@ namespace GGPort {
 				case UDPProtocol.Event.Type.Input: {
 					GameInput input = evt.input.input;
 
-					_host.SetLocalFrameNumber(input.frame);
+					_host.SetLocalFrameNumber(input.Frame);
 					_host.SendInputAck();
-					_inputs[input.frame % SPECTATOR_FRAME_BUFFER_SIZE] = input;
+					_inputs[input.Frame % SPECTATOR_FRAME_BUFFER_SIZE] = input;
 					break;
 				}
 			}

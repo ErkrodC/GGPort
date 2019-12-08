@@ -77,7 +77,7 @@ namespace VectorWar {
 			}
 
 			PerfMon.ggpoutil_perfmon_init();
-			TextHelper.instance.SetStatusText("Connecting to peers.");
+			GameRenderer.instance.SetStatusText("Connecting to peers.");
 		}
 
 		// Create a new spectator session
@@ -112,7 +112,7 @@ namespace VectorWar {
 
 			PerfMon.ggpoutil_perfmon_init();
 
-			TextHelper.instance.SetStatusText("Starting new spectator session");
+			GameRenderer.instance.SetStatusText("Starting new spectator session");
 		}
 		
 		// Disconnects a player from this session.
@@ -125,14 +125,13 @@ namespace VectorWar {
 				? $"Disconnected player {player}.{Environment.NewLine}"
 				: $"Error while disconnecting player (err:{result}).{Environment.NewLine}";
 
-			TextHelper.instance.SetStatusText(logMsg);
+			GameRenderer.instance.SetStatusText(logMsg);
 		}
 
 		// Draws the current frame without modifying the game state.
 		public static void DrawCurrentFrame() {
-			/*if (renderer != nullptr) {
-				renderer.Draw(gs, ngs);
-			}*/
+			
+				GameRenderer.instance.Draw(GameState, NonGameState);
 			// TODO update unity visualization here
 		}
 
@@ -249,7 +248,7 @@ namespace VectorWar {
 				session = null;
 			}
 
-			TextHelper.instance = null;
+			GameRenderer.instance = null;
 		}
 
 		/* 
@@ -305,7 +304,7 @@ namespace VectorWar {
 			switch (info.code) {
 				case EventCode.ConnectedToPeer:
 					NonGameState.SetConnectState(info.connected.player, PlayerConnectState.Synchronizing);
-					TextHelper.instance.SetStatusText($"Connected to player {info.connected.player.HandleValue}");
+					GameRenderer.instance.SetStatusText($"Connected to player {info.connected.player.HandleValue}");
 					break;
 				case EventCode.SynchronizingWithPeer:
 					int progress = 100 * info.synchronizing.count / info.synchronizing.total;
@@ -316,7 +315,7 @@ namespace VectorWar {
 					break;
 				case EventCode.Running:
 					NonGameState.SetConnectState(PlayerConnectState.Running);
-					TextHelper.instance.SetStatusText("");
+					GameRenderer.instance.SetStatusText("");
 					break;
 				case EventCode.ConnectionInterrupted:
 					NonGameState.SetDisconnectTimeout(info.connectionInterrupted.player,

@@ -100,9 +100,9 @@ namespace GGPort {
 			nextReceiveSequenceNumber = 0;
 			udp = null;
 			
-			lastSentInput.init(-1, null, 1);
-			lastReceivedInput.init(-1, null, 1);
-			lastAckedInput.init(-1, null, 1);
+			lastSentInput.Init(-1, null, 1);
+			lastReceivedInput.Init(-1, null, 1);
+			lastAckedInput.Init(-1, null, 1);
 
 			state = default;
 			
@@ -188,7 +188,7 @@ namespace GGPort {
 
 		public void SendInputAck() {
 			UDPMessage msg = new UDPMessage(UDPMessage.MsgType.InputAck);
-			msg.inputAck.ackFrame = lastReceivedInput.frame;
+			msg.inputAck.ackFrame = lastReceivedInput.Frame;
 			SendMsg(ref msg);
 		}
 
@@ -266,7 +266,7 @@ namespace GGPort {
 			* last frame they gave us plus some delta for the one-way packet
 			* trip time.
 			*/
-			int remoteFrame = lastReceivedInput.frame + (roundTripTime * 60 / 1000);
+			int remoteFrame = lastReceivedInput.Frame + (roundTripTime * 60 / 1000);
 
 			/*
 			* Our frame advantage is how many frames *behind* the other guy
@@ -355,14 +355,15 @@ namespace GGPort {
 					Log($"{prefix} input ack.{Environment.NewLine}");
 					break;
 				default:
-					throw new ArgumentException("Unknown UdpMsg type.");
+					Platform.AssertFailed($"Unknown {nameof(UDPMessage)} type.");
+					break;
 			}
 		}
 
 		protected void LogEvent(string prefix, Event evt) {
 			switch (evt.type) {
 				case Event.Type.Synchronized:
-					Log($"{prefix} (event: Synchronzied).{Environment.NewLine}");
+					Log($"{prefix} (event: {nameof(Event.Type.Synchronized)}).{Environment.NewLine}");
 					break;
 			}
 		}
@@ -371,9 +372,13 @@ namespace GGPort {
 			if (state.sync.random == 0) {
 				state.sync.random = (uint) (new Random().Next(0, ushort.MaxValue) & 0xFFFF);
 			}
+
+			UDPMessage msg = new UDPMessage(UDPMessage.MsgType.SyncRequest) {
+				syncRequest = {
+					randomRequest = state.sync.random
+				}
+			};
 			
-			UDPMessage msg = new UDPMessage(UDPMessage.MsgType.SyncRequest);
-			msg.syncRequest.randomRequest = state.sync.random;
 			SendMsg(ref msg);
 		}
 
@@ -412,9 +417,7 @@ namespace GGPort {
 					ooPacket.msg = entry.msg;
 					ooPacket.dest_addr = entry.dest_addr;
 				} else {
-					if (entry.dest_addr.Address.Equals(IPAddress.None)) {
-						throw new ArgumentException();
-					}
+					Platform.Assert(!entry.dest_addr.Address.Equals(IPAddress.None));
 					
 					BinaryFormatter formatter = new BinaryFormatter(); // LOH relates to here as well
 					using (MemoryStream ms = new MemoryStream()) {
@@ -451,35 +454,29 @@ namespace GGPort {
 				byte[] bits = msg.input.bits;
 
 				GameInput outputQueueFront = pendingOutgoingInputs.Peek();
-				msg.input.startFrame = (uint) outputQueueFront.frame;
-				msg.input.inputSize = (byte) outputQueueFront.size;
+				msg.input.startFrame = (uint) outputQueueFront.Frame;
+				msg.input.inputSize = (byte) outputQueueFront.Size;
 
-				if (!(last.frame == -1 || last.frame + 1 == msg.input.startFrame)) {
-					throw new ArgumentException();
-				}
+				Platform.Assert(last.Frame == -1 || last.Frame + 1 == msg.input.startFrame);
 				
 				foreach (GameInput pendingInput in pendingOutgoingInputs) {
 					bool currentEqualsLastBits = true;
-					for (int j = 0; j < pendingInput.size; j++) {
-						if (pendingInput.bits[j] != last.bits[j]) {
+					for (int j = 0; j < pendingInput.Size; j++) {
+						if (pendingInput.Bits[j] != last.Bits[j]) {
 							currentEqualsLastBits = false;
 							break;
 						}
 					}
 					
 					if (!currentEqualsLastBits) {
-						if (GameInput.kMaxBytes * GameInput.kMaxPlayers * 8 >= 1 << BitVector.BITVECTOR_NIBBLE_SIZE) {
-							throw new ArgumentException();
-						}
+						Platform.Assert(GameInput.kMaxBytes * GameInput.kMaxPlayers * 8 < 1 << BitVector.BITVECTOR_NIBBLE_SIZE);
 
-						for (int j = 0; j < pendingInput.size * 8; j++) {
-							if (j >= 1 << BitVector.BITVECTOR_NIBBLE_SIZE) {
-								throw new ArgumentException();
-							}
+						for (int j = 0; j < pendingInput.Size * 8; j++) {
+							Platform.Assert(j < 1 << BitVector.BITVECTOR_NIBBLE_SIZE);
 							
-							if (pendingInput.value(j) != last.value(j)) {
+							if (pendingInput.Value(j) != last.Value(j)) {
 								BitVector.SetBit(msg.input.bits, ref offset);
-								if (pendingInput.value(j)) {
+								if (pendingInput.Value(j)) {
 									BitVector.SetBit(bits, ref offset);
 								} else {
 									BitVector.ClearBit(bits, ref offset);
@@ -498,7 +495,7 @@ namespace GGPort {
 				msg.input.inputSize = 0;
 			}
 			
-			msg.input.ackFrame = lastReceivedInput.frame;
+			msg.input.ackFrame = lastReceivedInput.Frame;
 			msg.input.numBits = (ushort) offset;
 
 			msg.input.disconnectRequested = currentState == State.Disconnected;
@@ -512,16 +509,14 @@ namespace GGPort {
 				}
 			}
 
-			if (offset >= UDPMessage.MAX_COMPRESSED_BITS) {
-				throw new ArgumentException();
-			}
+			Platform.Assert(offset < UDPMessage.MAX_COMPRESSED_BITS);
 
 			SendMsg(ref msg);
 		}
 
 		protected bool OnInvalid(ref UDPMessage msg, int len) {
-			throw new ArgumentException("Invalid msg in UdpProtocol");
-			//return false;
+			Platform.AssertFailed($"Invalid {nameof(msg)} in {nameof(UDPProtocol)}.");
+			return false;
 		}
 
 		protected bool OnSyncRequest(ref UDPMessage msg, int len) {
@@ -530,9 +525,13 @@ namespace GGPort {
 				
 				return false;
 			}
+
+			UDPMessage reply = new UDPMessage(UDPMessage.MsgType.SyncReply) {
+				syncReply = {
+					randomReply = msg.syncRequest.randomRequest
+				}
+			};
 			
-			UDPMessage reply = new UDPMessage(UDPMessage.MsgType.SyncReply);
-			reply.syncReply.randomReply = msg.syncRequest.randomRequest;
 			SendMsg(ref reply);
 			
 			return true;
@@ -564,7 +563,7 @@ namespace GGPort {
 				Event evt = new Event(Event.Type.Synchronized);
 				QueueEvent(ref evt); // TODO ref is unnecessary?
 				currentState = State.Running;
-				lastReceivedInput.frame = -1;
+				lastReceivedInput.Frame = -1;
 				remoteMagicNumber = msg.header.magic;
 			} else {
 				Event evt = new Event(Event.Type.Synchronizing) {
@@ -593,33 +592,29 @@ namespace GGPort {
 				}
 			} else {
 				// Update the peer connection status if this peer is still considered to be part of the network.
-				UDPMessage.ConnectStatus[] remote_status = msg.input.peerConnectStatus;
+				UDPMessage.ConnectStatus[] remoteStatus = msg.input.peerConnectStatus;
 				for (int i = 0; i < peerConnectStatus.Length; i++) {
-					if (remote_status[i].LastFrame < peerConnectStatus[i].LastFrame) {
-						throw new ArgumentException();
-					}
+					Platform.Assert(remoteStatus[i].LastFrame >= peerConnectStatus[i].LastFrame);
 					
-					peerConnectStatus[i].IsDisconnected = peerConnectStatus[i].IsDisconnected || remote_status[i].IsDisconnected;
+					peerConnectStatus[i].IsDisconnected = peerConnectStatus[i].IsDisconnected || remoteStatus[i].IsDisconnected;
 					peerConnectStatus[i].LastFrame = Math.Max(
 						peerConnectStatus[i].LastFrame,
-						remote_status[i].LastFrame
+						remoteStatus[i].LastFrame
 					);
 				}
 			}
 
-			/*
-			* Decompress the input.
-			*/
-			int last_received_frame_number = lastReceivedInput.frame;
+			// Decompress the input.
+			int lastReceivedFrameNumber = lastReceivedInput.Frame;
 			if (msg.input.numBits != 0) {
 				int offset = 0;
 				byte[] bits = msg.input.bits;
 				int numBits = msg.input.numBits;
 				int currentFrame = (int) msg.input.startFrame; // TODO ecgh
 
-				lastReceivedInput.size = msg.input.inputSize;
-				if (lastReceivedInput.frame < 0) {
-					lastReceivedInput.frame = (int) (msg.input.startFrame - 1); // TODO ecgh
+				lastReceivedInput.Size = msg.input.inputSize;
+				if (lastReceivedInput.Frame < 0) {
+					lastReceivedInput.Frame = (int) (msg.input.startFrame - 1); // TODO ecgh
 				}
 
 				while (offset < numBits) {
@@ -627,76 +622,57 @@ namespace GGPort {
 					* Keep walking through the frames (parsing bits) until we reach
 					* the inputs for the frame right after the one we're on.
 					*/
-					if (currentFrame > lastReceivedInput.frame + 1) {
-						throw new ArgumentException();
-					}
+					Platform.Assert(currentFrame <= lastReceivedInput.Frame + 1);
 					
-					bool useInputs = currentFrame == lastReceivedInput.frame + 1;
+					bool useInputs = currentFrame == lastReceivedInput.Frame + 1;
 
 					while (BitVector.ReadBit(bits, ref offset) != 0) {
 						int on = BitVector.ReadBit(bits, ref offset);
 						int button = BitVector.ReadNibblet(bits, ref offset);
 						if (useInputs) {
 							if (on != 0) {
-								lastReceivedInput.set(button);
+								lastReceivedInput.Set(button);
 							} else {
-								lastReceivedInput.clear(button);
+								lastReceivedInput.Clear(button);
 							}
 						}
 					}
 
-					if (offset > numBits) {
-						throw new ArgumentException();
-					}
+					Platform.Assert(offset <= numBits);
 
-					/*
-					* Now if we want to use these inputs, go ahead and send them to
-					* the emulator.
-					*/
+					// Now if we want to use these inputs, go ahead and send them to the emulator.
 					if (useInputs) {
-						/*
-						* Move forward 1 frame in the stream.
-						*/
-						if (currentFrame != lastReceivedInput.frame + 1) {
-							throw new ArgumentException();
-						}
+						// Move forward 1 frame in the stream.
+						Platform.Assert(currentFrame == lastReceivedInput.Frame + 1);
 						
-						lastReceivedInput.frame = currentFrame;
+						lastReceivedInput.Frame = currentFrame;
 
-						/*
-						* Send the event to the emualtor
-						*/
+						// Send the event to the emulator
 						Event evt = new Event(Event.Type.Input) {
 							input = {
 								input = lastReceivedInput
 							}
 						};
 
-						string desc = lastReceivedInput.desc();
+						string desc = lastReceivedInput.Desc();
 						state.running.last_input_packet_recv_time = Platform.GetCurrentTimeMS();
 
-						Log($"Sending frame {lastReceivedInput.frame} to emu queue {queue} ({desc}).{Environment.NewLine}");
+						Log($"Sending frame {lastReceivedInput.Frame} to emu queue {queue} ({desc}).{Environment.NewLine}");
 						QueueEvent(ref evt);
 					} else {
-						Log($"Skipping past frame:({currentFrame}) current is {lastReceivedInput.frame}.{Environment.NewLine}");
+						Log($"Skipping past frame:({currentFrame}) current is {lastReceivedInput.Frame}.{Environment.NewLine}");
 					}
 
-					/*
-					* Move forward 1 frame in the input stream.
-					*/
+					// Move forward 1 frame in the input stream.
 					currentFrame++;
 				}
 			}
 
-			if (lastReceivedInput.frame < last_received_frame_number) {
-				throw new ArgumentException();
-			}
+			Platform.Assert(lastReceivedInput.Frame >= lastReceivedFrameNumber);
 
-			/*
-			* Get rid of our buffered input
-			*/
-			while (pendingOutgoingInputs.Count != 0 && pendingOutgoingInputs.Peek().frame < msg.input.ackFrame) {
-				Log($"Throwing away pending output frame {pendingOutgoingInputs.Peek().frame}{Environment.NewLine}");
+			// Get rid of our buffered input
+			while (pendingOutgoingInputs.Count != 0 && pendingOutgoingInputs.Peek().Frame < msg.input.ackFrame) {
+				Log($"Throwing away pending output frame {pendingOutgoingInputs.Peek().Frame}{Environment.NewLine}");
 				lastAckedInput = pendingOutgoingInputs.Pop();
 			}
 
@@ -704,11 +680,9 @@ namespace GGPort {
 		}
 
 		protected bool OnInputAck(ref UDPMessage msg, int len) {
-			/*
-			* Get rid of our buffered input
-			*/
-			while (pendingOutgoingInputs.Count != 0 && pendingOutgoingInputs.Peek().frame < msg.inputAck.ackFrame) {
-				Log($"Throwing away pending output frame {pendingOutgoingInputs.Peek().frame}{Environment.NewLine}");
+			// Get rid of our buffered input
+			while (pendingOutgoingInputs.Count != 0 && pendingOutgoingInputs.Peek().Frame < msg.inputAck.ackFrame) {
+				Log($"Throwing away pending output frame {pendingOutgoingInputs.Peek().Frame}{Environment.NewLine}");
 				lastAckedInput = pendingOutgoingInputs.Pop();
 			}
 			
@@ -717,8 +691,12 @@ namespace GGPort {
 
 		protected bool OnQualityReport(ref UDPMessage msg, int len) {
 			// send a reply so the other side can compute the round trip transmit time.
-			UDPMessage reply = new UDPMessage(UDPMessage.MsgType.QualityReply);
-			reply.qualityReply.pong = msg.qualityReport.ping;
+			UDPMessage reply = new UDPMessage(UDPMessage.MsgType.QualityReply) {
+				qualityReply = {
+					pong = msg.qualityReport.ping
+				}
+			};
+			
 			SendMsg(ref reply);
 
 			remoteFrameAdvantage = msg.qualityReport.frameAdvantage;
@@ -745,14 +723,13 @@ namespace GGPort {
 			}
 
 			long now = Platform.GetCurrentTimeMS();
-			uint next_interval;
 
 			PumpSendQueue();
 			switch (currentState) {
 				case State.Syncing:
-					next_interval = (state.sync.roundtrips_remaining == kNumSyncPackets) ? kSyncFirstRetryInterval : kSyncRetryInterval;
-					if (lastSendTime != 0 && lastSendTime + next_interval < now) {
-					   Log($"No luck syncing after {next_interval} ms... Re-queueing sync packet.{Environment.NewLine}");
+					uint nextInterval = (state.sync.roundtrips_remaining == kNumSyncPackets) ? kSyncFirstRetryInterval : kSyncRetryInterval;
+					if (lastSendTime != 0 && lastSendTime + nextInterval < now) {
+					   Log($"No luck syncing after {nextInterval} ms... Re-queueing sync packet.{Environment.NewLine}");
 					   SendSyncRequest();
 					}
 					break;
@@ -760,16 +737,19 @@ namespace GGPort {
 				case State.Running:
 					// xxx: rig all this up with a timer wrapper
 					if (state.running.last_input_packet_recv_time == 0 || state.running.last_input_packet_recv_time + kRunningRetryInterval < now) {
-					   Log($"Haven't exchanged packets in a while (last received:{lastReceivedInput.frame}  last sent:{lastSentInput.frame}).  Resending.{Environment.NewLine}");
+					   Log($"Haven't exchanged packets in a while (last received:{lastReceivedInput.Frame}  last sent:{lastSentInput.Frame}).  Resending.{Environment.NewLine}");
 					   SendPendingOutput();
 					   state.running.last_input_packet_recv_time = now;
 					}
 
 					if (state.running.last_quality_report_time == 0 || state.running.last_quality_report_time + kQualityReportInterval < now) {
-					   UDPMessage msg = new UDPMessage(UDPMessage.MsgType.QualityReport);
-					   msg.qualityReport.ping = Platform.GetCurrentTimeMS();
-					   msg.qualityReport.frameAdvantage = (sbyte) localFrameAdvantage;
-					   SendMsg(ref msg);
+						UDPMessage msg = new UDPMessage(UDPMessage.MsgType.QualityReport) {
+							qualityReport = {
+								ping = Platform.GetCurrentTimeMS(), frameAdvantage = (sbyte) localFrameAdvantage
+							}
+						};
+						
+						SendMsg(ref msg);
 					   state.running.last_quality_report_time = now;
 					}
 

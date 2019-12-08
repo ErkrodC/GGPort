@@ -111,20 +111,18 @@ namespace GGPort {
 
 				   Log($"last confirmed frame in p2p backend is {total_min_confirmed}.{Environment.NewLine}");
 				   if (total_min_confirmed >= 0) {
-					   if (total_min_confirmed == int.MaxValue) {
-						   throw new ArgumentException();
-					   }
+					   Platform.Assert(total_min_confirmed != int.MaxValue);
 					   
 					   if (numSpectators > 0) {
 						   while (nextSpectatorFrame <= total_min_confirmed) {
 							   Log($"pushing frame {nextSpectatorFrame} to spectators.{Environment.NewLine}");
 
 							   GameInput input = new GameInput {
-								   frame = nextSpectatorFrame,
-								   size = inputSize * numPlayers
+								   Frame = nextSpectatorFrame,
+								   Size = inputSize * numPlayers
 							   };
 							   
-							   sync.GetConfirmedInputs(input.bits, inputSize * numPlayers, nextSpectatorFrame);
+							   sync.GetConfirmedInputs(input.Bits, inputSize * numPlayers, nextSpectatorFrame);
 							   for (int i = 0; i < numSpectators; i++) {
 								   spectators[i].SendInput(ref input);
 							   }
@@ -206,19 +204,19 @@ namespace GGPort {
 				input.init(-1, ms.ToArray(), (int) ms.Length);
 			} // TODO optimize/refactor*/
 			
-			input.init(-1, value, value.Length);
+			input.Init(-1, value, value.Length);
 
 			// Feed the input for the current frame into the synchronzation layer.
 			if (!sync.AddLocalInput(queue, ref input)) {
 				return ErrorCode.PredictionThreshold;
 			}
 
-			if (input.frame != GameInput.kNullFrame) { // xxx: <- comment why this is the case
+			if (input.Frame != GameInput.kNullFrame) { // xxx: <- comment why this is the case
 				// Update the local connect status state to indicate that we've got a
 				// confirmed local frame for this player.  this must come first so it
 				// gets incorporated into the next packet we send.
-				Log($"setting local connect status for local queue {queue} to {input.frame}{Environment.NewLine}");
-				localConnectStatus[queue].LastFrame = input.frame;
+				Log($"setting local connect status for local queue {queue} to {input.Frame}{Environment.NewLine}");
+				localConnectStatus[queue].LastFrame = input.Frame;
 
 				// Send the input to all the remote players.
 				for (int i = 0; i < numPlayers; i++) {
@@ -611,17 +609,15 @@ namespace GGPort {
 			switch (evt.type) {
 				case UDPProtocol.Event.Type.Input:
 					if (!localConnectStatus[queue].IsDisconnected) {
-						int current_remote_frame = localConnectStatus[queue].LastFrame;
-						int new_remote_frame = evt.input.input.frame;
+						int currentRemoteFrame = localConnectStatus[queue].LastFrame;
+						int newRemoteFrame = evt.input.input.Frame;
 						
-						if (current_remote_frame != -1 && new_remote_frame != current_remote_frame + 1) {
-							throw new ArgumentException();
-						}
+						Platform.Assert(currentRemoteFrame == -1 || newRemoteFrame == currentRemoteFrame + 1);
 
 						sync.AddRemoteInput(queue, ref evt.input.input);
 						// Notify the other endpoints which frame we received from a peer
-						Log($"setting remote connect status for queue {queue} to {evt.input.input.frame}{Environment.NewLine}");
-						localConnectStatus[queue].LastFrame = evt.input.input.frame;
+						Log($"setting remote connect status for queue {queue} to {evt.input.input.Frame}{Environment.NewLine}");
+						localConnectStatus[queue].LastFrame = evt.input.input.Frame;
 					}
 					break;
 

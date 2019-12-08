@@ -8,6 +8,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace GGPort {
 	public static class Platform {
@@ -24,21 +25,36 @@ namespace GGPort {
 
 		public static int GetProcessID() { return Process.GetCurrentProcess().Id; }
 		
-		public static void ASSERT(bool expression, string msg = "") {
+		public static void Assert(bool expression, string msg = "GGPO Assertion Failed.", [CallerFilePath] string callerFilePath = "", [CallerMemberName] string callerName = "", [CallerLineNumber] int callerLineNumber = -1) {
 			do {
 				if (!(expression)) {
-					
-					AssertFailed(msg);
-					Environment.Exit(0);
+					AssertFailedInternal(msg, callerFilePath, callerName, callerLineNumber);
 				}
 			} while (false);
 		}
 
-		public static void AssertFailed(string msg) {
-			Console.WriteLine(msg);
+		public static void AssertFailed(string msg, [CallerFilePath] string callerFilePath = "", [CallerMemberName] string callerName = "", [CallerLineNumber] int callerLineNumber = -1) {
+			AssertFailedInternal(msg, callerFilePath, callerName, callerLineNumber);
+		}
+
+		private static void AssertFailedInternal(string msg, string callerFilePath, string callerName, int callerLineNumber) {
+			if (!string.IsNullOrEmpty(callerFilePath)) {
+				string[] callerFilePathSplit = callerFilePath.Split('/', '\\');
+				string fileName = callerFilePathSplit[callerFilePathSplit.Length - 1];
+				msg += $"{Environment.NewLine}\tIn {fileName}";
+
+				if (!string.IsNullOrEmpty(callerName)) {
+					msg += $", {callerName}";
+
+					if (callerLineNumber != -1) {
+						msg += $":{callerLineNumber}";
+					}
+				}
+			}
+			
+			LogUtil.Log(msg);
 			Debugger.Break();
-			// TODO
-			//MessageBoxA(NULL, msg, "GGPO Assertion Failed", MB_OK | MB_ICONEXCLAMATION);
+			Environment.Exit(0);
 		}
 
 		public static long GetCurrentTimeMS() {

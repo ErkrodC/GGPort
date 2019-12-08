@@ -15,9 +15,7 @@ namespace GGPort {
 		}
 
 		public static void WriteNibblet(byte[] vector, int nibble, ref int offset) {
-			if (nibble >= 1 << BITVECTOR_NIBBLE_SIZE) {
-				throw new ArgumentException();
-			}
+			Platform.Assert(nibble < 1 << BITVECTOR_NIBBLE_SIZE);
 			
 			for (int i = 0; i < BITVECTOR_NIBBLE_SIZE; i++) {
 				if ((nibble & (1 << i)) != 0) {

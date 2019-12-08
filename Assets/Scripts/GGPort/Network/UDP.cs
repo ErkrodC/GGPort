@@ -65,26 +65,26 @@ namespace GGPort {
 		}
 
 		public virtual bool OnLoopPoll(object cookie) {
-			byte[] recv_buf = new byte[MAX_UDP_PACKET_SIZE];
+			byte[] receiveBuffer = new byte[MAX_UDP_PACKET_SIZE];
 
-			EndPoint recv_addr = new IPEndPoint(IPAddress.Any, 0);
+			EndPoint senderEndPoint = new IPEndPoint(IPAddress.Any, 0);
 			
 			for (;;) {
 				try {
 					if (socket.Available <= 0) {
 						break;
 					}
-					int len = socket.ReceiveFrom(recv_buf, MAX_UDP_PACKET_SIZE, SocketFlags.None, ref recv_addr);
+					int len = socket.ReceiveFrom(receiveBuffer, MAX_UDP_PACKET_SIZE, SocketFlags.None, ref senderEndPoint);
 
-					if (recv_addr is IPEndPoint recvAddrIP) {
+					if (senderEndPoint is IPEndPoint recvAddrIP) {
 						Log($"recvfrom returned (len:{len}  from:{recvAddrIP.Address}:{recvAddrIP.Port}).{Environment.NewLine}");
 						IFormatter br = new BinaryFormatter();
-						using (MemoryStream ms = new MemoryStream(recv_buf)) {
+						using (MemoryStream ms = new MemoryStream(receiveBuffer)) {
 							UDPMessage msg = (UDPMessage) br.Deserialize(ms); // TODO deserialization probably doesn't work? why does it work for syncing but not input?
 							callbacks.OnMsg(recvAddrIP, ref msg, len);
 						} // TODO optimize refactor
 					} else {
-						throw new ArgumentException("Was expecting IPEndPoint. You added this check..."); // TODO remove?
+						Platform.AssertFailed($"Expecting endpoint of type {nameof(IPEndPoint)}, but was given {senderEndPoint.GetType()}.");
 					}
 
 					// TODO: handle len == 0... indicates a disconnect.

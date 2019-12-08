@@ -16,90 +16,76 @@ namespace GGPort {
 		public const int kMaxPlayers = 2;
 		public const int kNullFrame = -1;
 		
-		public int frame { get; set; }
-		public int size { get; set; } /* size in bytes of the entire input for all players */
-		public fixed byte bits[kMaxBytes * kMaxPlayers];
+		public int Frame { get; set; }
+		public int Size { get; set; } /* size in bytes of the entire input for all players */
+		public fixed byte Bits[kMaxBytes * kMaxPlayers];
 
-		public bool is_null() {
-			return frame == -1;
+		public bool IsNull() {
+			return Frame == -1;
 		}
 
-		public void init(int iframe, byte[] ibits, int isize, int offset) {
-			if (isize == 0) {
-				throw new ArgumentException();
-			}
+		public void Init(int frame, byte[] bits, int size, int offset) {
+			Platform.Assert(0 < size && size <= kMaxBytes);
+			
+			Frame = frame;
+			Size = size;
 
-			if (isize > kMaxBytes) {
-				throw new ArgumentException();
+			const int kSizeOfBits = kMaxBytes * kMaxPlayers;
+			for (int i = 0; i < kSizeOfBits; i++) {
+				Bits[i] = 0;
 			}
 			
-			frame = iframe;
-			size = isize;
-
-			const int sizeOfBits = kMaxBytes * kMaxPlayers;
-			for (int i = 0; i < sizeOfBits; i++) {
-				bits[i] = 0;
-			}
-			
-			if (ibits != null) {
-				int startOffset = offset * isize;
-				for (int i = 0; i < isize; i++) {
-					bits[startOffset + i] = ibits[i];
+			if (bits != null) {
+				int startOffset = offset * size;
+				for (int i = 0; i < size; i++) {
+					Bits[startOffset + i] = bits[i];
 				}
 			}
 		}
 
-		public void init(int iframe, byte[] ibits, int isize) {
-			if (isize == 0) {
-				throw new ArgumentException();
-			}
+		public void Init(int frame, byte[] bits, int size) {
+			Platform.Assert(0 < size && size <= kMaxBytes);
+			
+			Frame = frame;
+			Size = size;
 
-			if (isize > kMaxBytes * kMaxPlayers) {
-				throw new ArgumentException();
+			const int kSizeOfBits = kMaxBytes * kMaxPlayers;
+			for (int i = 0; i < kSizeOfBits; i++) {
+				Bits[i] = 0;
 			}
 			
-			frame = iframe;
-			size = isize;
-
-			const int sizeOfBits = kMaxBytes * kMaxPlayers;
-			for (int i = 0; i < sizeOfBits; i++) {
-				bits[i] = 0;
-			}
-			
-			if (ibits != null) {
-				for (int i = 0; i < isize; i++) {
-					bits[i] = ibits[i];
+			if (bits != null) {
+				for (int i = 0; i < size; i++) {
+					Bits[i] = bits[i];
 				}
 			}
 		}
 
-		public bool value(int i) {
-			return (bits[i/8] & (1 << (i%8))) != 0;
+		public bool Value(int i) {
+			return (Bits[i/8] & (1 << (i%8))) != 0;
 		}
 
-		public void set(int i) {
-			bits[i/8] |= (byte) (1 << (i%8));
+		public void Set(int i) {
+			Bits[i/8] |= (byte) (1 << (i%8));
 		}
 
-		public void clear(int i) {
-			bits[i/8] &= (byte) ~(1 << (i%8));
+		public void Clear(int i) {
+			Bits[i/8] &= (byte) ~(1 << (i%8));
 		}
 
-		public void erase() {
-			const int sizeOfBits = kMaxBytes * kMaxPlayers;
-			for (int i = 0; i < sizeOfBits; i++) {
-				bits[i] = 0;
+		public void Erase() {
+			const int kSizeOfBits = kMaxBytes * kMaxPlayers;
+			for (int i = 0; i < kSizeOfBits; i++) {
+				Bits[i] = 0;
 			}
 		}
 
-		public string desc(bool show_frame = true) {
-			if (size == 0) {
-				throw new ArgumentException();
-			}
+		public string Desc(bool showFrame = true) {
+			Platform.Assert(Size != 0);
 			
-			string result = $"({(show_frame ? $"frame:{frame} " : "")}size:{size} ";
+			string result = $"({(showFrame ? $"frame:{Frame} " : "")}size:{Size} ";
 
-			for (int i = 0; i < size * 8; i++) {
+			for (int i = 0; i < Size * 8; i++) {
 				result += $"{i:00} ";
 			}
 
@@ -108,23 +94,23 @@ namespace GGPort {
 			return result;
 		}
 
-		public void log(string prefix, bool show_frame = true) {
-			LogUtil.Log($"{prefix}{desc(show_frame)}{Environment.NewLine}");
+		public void Log(string prefix, bool showFrame = true) {
+			LogUtil.Log($"{prefix}{Desc(showFrame)}{Environment.NewLine}");
 		}
 
-		public bool equal(ref GameInput other, bool bitsonly = false) {
-			if (!bitsonly && frame != other.frame) {
-				LogUtil.Log($"frames don't match: {frame}, {other.frame}{Environment.NewLine}");
+		public bool Equal(ref GameInput other, bool bitsOnly = false) {
+			if (!bitsOnly && Frame != other.Frame) {
+				LogUtil.Log($"frames don't match: {Frame}, {other.Frame}{Environment.NewLine}");
 			}
 			
-			if (size != other.size) {
-				LogUtil.Log($"sizes don't match: {size}, {other.size}{Environment.NewLine}");
+			if (Size != other.Size) {
+				LogUtil.Log($"sizes don't match: {Size}, {other.Size}{Environment.NewLine}");
 			}
 
 			bool bitsAreEqual = true;
 
-			for (int i = 0; i < size; i++) {
-				if (bits[i] != other.bits[i]) {
+			for (int i = 0; i < Size; i++) {
+				if (Bits[i] != other.Bits[i]) {
 					bitsAreEqual = false;
 					break;
 				}
@@ -134,12 +120,10 @@ namespace GGPort {
 				LogUtil.Log($"bits don't match{Environment.NewLine}");
 			}
 
-			if (size == 0 || other.size == 0) {
-				throw new ArgumentException();
-			}
+			Platform.Assert(Size != 0 && other.Size != 0);
 			
-			return (bitsonly || frame == other.frame) &&
-			       size == other.size &&
+			return (bitsOnly || Frame == other.Frame) &&
+			       Size == other.Size &&
 			       bitsAreEqual;
 		}
 	};

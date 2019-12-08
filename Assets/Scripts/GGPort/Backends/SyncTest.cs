@@ -29,7 +29,7 @@ namespace GGPort {
 			_rollingback = false;
 			_running = false;
 			_logfp = null;
-			_current_input.erase();
+			_current_input.Erase();
 			_game = gamename;
 
 			/*
@@ -78,7 +78,7 @@ namespace GGPort {
 			} // TODO refactor/optimize
 			
 			for (int i = 0; i < size; i++) {
-				_current_input.bits[index * size + i] |= valByteArr[i];
+				_current_input.Bits[index * size + i] |= valByteArr[i];
 			}
 			return ErrorCode.Success;
 		}
@@ -96,7 +96,7 @@ namespace GGPort {
 			}
 
 			for (int i = 0; i < size; i++) {
-				Buffer.SetByte(values, i, _last_input.bits[i]);
+				Buffer.SetByte(values, i, _last_input.Bits[i]);
 			}
 			
 			disconnectFlags = 0;
@@ -106,7 +106,7 @@ namespace GGPort {
 
 		public override ErrorCode AdvanceFrame() {
 			_sync.IncrementFrame();
-			_current_input.erase();
+			_current_input.Erase();
    
 			LogUtil.Log($"End of frame({_sync.GetFrameCount()})...{Environment.NewLine}");
 			EndLog();
