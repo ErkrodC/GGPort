@@ -23,6 +23,10 @@ namespace VectorWar {
 				visualShips[i] = Instantiate(shipPrefab, gameCanvas.transform);
 				visualShips[i].SetActive(false);
 			}
+
+#if !SHOW_LOG
+			logView.gameObject.SetActive(false);
+#endif
 		}
 
 		private void OnDestroy() {

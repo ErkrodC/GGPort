@@ -10,6 +10,7 @@ using UnityEngine.UI;
 
 namespace VectorWar {
 	public class VectorWarGameManager : MonoBehaviour {
+		[SerializeField] private GameObject gameStartUI;
 		[SerializeField] private TMP_Text titleText;
 		[SerializeField] private TMP_InputField localPortText;
 		[SerializeField] private TMP_InputField numPlayersText;
@@ -128,6 +129,7 @@ namespace VectorWar {
 					numSpectators++;
 				}*/
 
+				gameStartUI.SetActive(false);
 				VectorWar.Init(localPort, numPlayers, players, 0/*numSpectators*/);
 			}
 

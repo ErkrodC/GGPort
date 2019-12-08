@@ -1,9 +1,6 @@
 ﻿using System;
-using System.IO;
 using System.Net;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Threading;
-using static GGPort.LogUtil;
 
 namespace GGPort {
 	public class PeerToPeerBackend : Session, IPollSink, UDP.Callbacks {
@@ -77,13 +74,13 @@ namespace GGPort {
 			}
 
 			// Preload the ROM
-			LogCallback += callbacks.LogText;
+			LogUtil.LogCallback += callbacks.LogText;
 			callbacks.BeginGame(gameName);
 		}
 
 		~PeerToPeerBackend() {
 			endpoints = null;
-			LogCallback -= callbacks.LogText;
+			LogUtil.LogCallback -= callbacks.LogText;
 		}
 
 		public override unsafe ErrorCode Idle(int timeout) {
@@ -109,13 +106,13 @@ namespace GGPort {
 					   total_min_confirmed = PollNPlayers(current_frame);
 				   }
 
-				   Log($"last confirmed frame in p2p backend is {total_min_confirmed}.{Environment.NewLine}");
+				   LogUtil.Log($"last confirmed frame in p2p backend is {total_min_confirmed}.{Environment.NewLine}");
 				   if (total_min_confirmed >= 0) {
 					   Platform.Assert(total_min_confirmed != int.MaxValue);
 					   
 					   if (numSpectators > 0) {
 						   while (nextSpectatorFrame <= total_min_confirmed) {
-							   Log($"pushing frame {nextSpectatorFrame} to spectators.{Environment.NewLine}");
+							   LogUtil.Log($"pushing frame {nextSpectatorFrame} to spectators.{Environment.NewLine}");
 
 							   GameInput input = new GameInput {
 								   Frame = nextSpectatorFrame,
@@ -129,8 +126,8 @@ namespace GGPort {
 							   nextSpectatorFrame++;
 						   }
 					   }
-					   
-					   Log($"setting confirmed frame in sync to {total_min_confirmed}.{Environment.NewLine}");
+
+					   LogUtil.Log($"setting confirmed frame in sync to {total_min_confirmed}.{Environment.NewLine}");
 					   sync.SetLastConfirmedFrame(total_min_confirmed);
 				   }
 
@@ -215,7 +212,7 @@ namespace GGPort {
 				// Update the local connect status state to indicate that we've got a
 				// confirmed local frame for this player.  this must come first so it
 				// gets incorporated into the next packet we send.
-				Log($"setting local connect status for local queue {queue} to {input.Frame}{Environment.NewLine}");
+				LogUtil.Log($"setting local connect status for local queue {queue} to {input.Frame}{Environment.NewLine}");
 				localConnectStatus[queue].LastFrame = input.Frame;
 
 				// Send the input to all the remote players.
@@ -240,7 +237,7 @@ namespace GGPort {
 		}
 
 		public override ErrorCode AdvanceFrame() {
-			Log($"End of frame ({sync.GetFrameCount()})...{Environment.NewLine}");
+			LogUtil.Log($"End of frame ({sync.GetFrameCount()})...{Environment.NewLine}");
 			sync.IncrementFrame();
 			Idle(0);
 			PollSyncEvents();
@@ -268,7 +265,7 @@ namespace GGPort {
 				
 				// xxx: we should be tracking who the local player is, but for now assume
 				// that if the endpoint is not initalized, this must be the local player.
-				Log($"Disconnecting local player {queue} at frame {localConnectStatus[queue].LastFrame} by user request.{Environment.NewLine}");
+				LogUtil.Log($"Disconnecting local player {queue} at frame {localConnectStatus[queue].LastFrame} by user request.{Environment.NewLine}");
 				
 				for (int i = 0; i < numPlayers; i++) {
 					if (endpoints[i].IsInitialized()) {
@@ -276,7 +273,7 @@ namespace GGPort {
 					}
 				}
 			} else {
-				Log($"Disconnecting queue {queue} at frame {localConnectStatus[queue].LastFrame} by user request.{Environment.NewLine}");
+				LogUtil.Log($"Disconnecting queue {queue} at frame {localConnectStatus[queue].LastFrame} by user request.{Environment.NewLine}");
 				DisconnectPlayerQueue(queue, localConnectStatus[queue].LastFrame);
 			}
 			return ErrorCode.Success;
@@ -363,15 +360,15 @@ namespace GGPort {
 
 			endpoints[queue].Disconnect();
 
-			Log($"Changing queue {queue} local connect status for last frame from {localConnectStatus[queue].LastFrame} to {syncto} on disconnect request (current: {framecount}).{Environment.NewLine}");
+			LogUtil.Log($"Changing queue {queue} local connect status for last frame from {localConnectStatus[queue].LastFrame} to {syncto} on disconnect request (current: {framecount}).{Environment.NewLine}");
 
 			localConnectStatus[queue].IsDisconnected = true;
 			localConnectStatus[queue].LastFrame = syncto;
 
 			if (syncto < framecount) {
-				Log($"adjusting simulation to account for the fact that {queue} disconnected @ {syncto}.{Environment.NewLine}");
+				LogUtil.Log($"adjusting simulation to account for the fact that {queue} disconnected @ {syncto}.{Environment.NewLine}");
 				sync.AdjustSimulation(syncto);
-				Log($"finished adjusting simulation.{Environment.NewLine}");
+				LogUtil.Log($"finished adjusting simulation.{Environment.NewLine}");
 			}
 
 			Event info = new Event {
@@ -447,14 +444,14 @@ namespace GGPort {
 				if (!localConnectStatus[i].IsDisconnected) {
 					total_min_confirmed = Math.Min(localConnectStatus[i].LastFrame, total_min_confirmed);
 				}
-				
-				Log($"  local endp: connected = {!localConnectStatus[i].IsDisconnected}, last_received = {localConnectStatus[i].LastFrame}, total_min_confirmed = {total_min_confirmed}.{Environment.NewLine}");
+
+				LogUtil.Log($"  local endp: connected = {!localConnectStatus[i].IsDisconnected}, last_received = {localConnectStatus[i].LastFrame}, total_min_confirmed = {total_min_confirmed}.{Environment.NewLine}");
 				if (!queue_connected && !localConnectStatus[i].IsDisconnected) {
-					Log($"disconnecting i {i} by remote request.{Environment.NewLine}");
+					LogUtil.Log($"disconnecting i {i} by remote request.{Environment.NewLine}");
 					DisconnectPlayerQueue(i, total_min_confirmed);
 				}
-				
-				Log($"  total_min_confirmed = {total_min_confirmed}.{Environment.NewLine}");
+
+				LogUtil.Log($"  total_min_confirmed = {total_min_confirmed}.{Environment.NewLine}");
 			}
 			
 			return total_min_confirmed;
@@ -468,7 +465,7 @@ namespace GGPort {
 			for (queue = 0; queue < numPlayers; queue++) {
 				bool queue_connected = true;
 				int queue_min_confirmed = int.MaxValue;
-				Log($"considering queue {queue}.{Environment.NewLine}");
+				LogUtil.Log($"considering queue {queue}.{Environment.NewLine}");
 
 				for (int i = 0; i < numPlayers; i++) {
 					// we're going to do a lot of logic here in consideration of endpoint i.
@@ -479,9 +476,9 @@ namespace GGPort {
 
 						queue_connected = queue_connected && connected;
 						queue_min_confirmed = Math.Min(last_received, queue_min_confirmed);
-						Log($"  endpoint {i}: connected = {connected}, last_received = {last_received}, queue_min_confirmed = {queue_min_confirmed}.{Environment.NewLine}");
+						LogUtil.Log($"  endpoint {i}: connected = {connected}, last_received = {last_received}, queue_min_confirmed = {queue_min_confirmed}.{Environment.NewLine}");
 					} else {
-						Log($"  endpoint {i}: ignoring... not running.{Environment.NewLine}");
+						LogUtil.Log($"  endpoint {i}: ignoring... not running.{Environment.NewLine}");
 					}
 				}
 				
@@ -489,8 +486,8 @@ namespace GGPort {
 				if (!localConnectStatus[queue].IsDisconnected) {
 					queue_min_confirmed = Math.Min(localConnectStatus[queue].LastFrame, queue_min_confirmed);
 				}
-				
-				Log($"  local endp: connected = {!localConnectStatus[queue].IsDisconnected}, last_received = {localConnectStatus[queue].LastFrame}, queue_min_confirmed = {queue_min_confirmed}.{Environment.NewLine}");
+
+				LogUtil.Log($"  local endp: connected = {!localConnectStatus[queue].IsDisconnected}, last_received = {localConnectStatus[queue].LastFrame}, queue_min_confirmed = {queue_min_confirmed}.{Environment.NewLine}");
 
 				if (queue_connected) {
 					total_min_confirmed = Math.Min(queue_min_confirmed, total_min_confirmed);
@@ -499,11 +496,12 @@ namespace GGPort {
 					// so, we need to re-adjust.  This can happen when we detect our own disconnect at frame n
 					// and later receive a disconnect notification for frame n-1.
 					if (!localConnectStatus[queue].IsDisconnected || localConnectStatus[queue].LastFrame > queue_min_confirmed) {
-						Log($"disconnecting queue {queue} by remote request.{Environment.NewLine}");
+						LogUtil.Log($"disconnecting queue {queue} by remote request.{Environment.NewLine}");
 						DisconnectPlayerQueue(queue, queue_min_confirmed);
 					}
 				}
-				Log($"  total_min_confirmed = {total_min_confirmed}.{Environment.NewLine}");
+
+				LogUtil.Log($"  total_min_confirmed = {total_min_confirmed}.{Environment.NewLine}");
 			}
 			
 			return total_min_confirmed;
@@ -616,7 +614,7 @@ namespace GGPort {
 
 						sync.AddRemoteInput(queue, ref evt.input.input);
 						// Notify the other endpoints which frame we received from a peer
-						Log($"setting remote connect status for queue {queue} to {evt.input.input.Frame}{Environment.NewLine}");
+						LogUtil.Log($"setting remote connect status for queue {queue} to {evt.input.input.Frame}{Environment.NewLine}");
 						localConnectStatus[queue].LastFrame = evt.input.input.Frame;
 					}
 					break;

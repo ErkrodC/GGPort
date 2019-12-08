@@ -46,7 +46,9 @@ namespace VectorWar {
 				FreeBuffer = FreeBuffer,
 				OnEvent = OnEvent,
 				LogGameState = LogGameState,
+#if SHOW_LOG				
 				LogText = LogCallback
+#endif
 			};
 
 #if SYNC_TEST
@@ -97,7 +99,10 @@ namespace VectorWar {
 				SaveGameState = SaveGameState,
 				FreeBuffer = FreeBuffer,
 				OnEvent = OnEvent,
-				LogGameState = LogGameState
+				LogGameState = LogGameState,
+#if SHOW_LOG
+				LogText = LogCallback
+#endif
 			};
 
 			result = Session.StartSpectating(
