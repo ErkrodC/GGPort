@@ -5,6 +5,7 @@ namespace GGPort {
 	public static class LogUtil {
 		private static FileStream logfile;
 		private static long start;
+		public static event SessionCallbacks.LogDelegate LogCallback = delegate(string message) {  };
 
 		public static void Log(string msg) {
 			if (!Platform.GetConfigBool("ggpo.log") || Platform.GetConfigBool("ggpo.log.ignore")) {
@@ -34,6 +35,7 @@ namespace GGPort {
 			}
 
 			toWrite += msg;
+			LogCallback?.Invoke(toWrite);
 			byte[] buffer = Encoding.UTF8.GetBytes(toWrite);
 
 			fp.Write(buffer, 0, buffer.Length);

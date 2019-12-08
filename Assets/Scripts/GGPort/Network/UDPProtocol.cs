@@ -297,14 +297,20 @@ namespace GGPort {
 				statsStartTime = now;
 			}
 
-			int total_bytes_sent = bytesSent + (kUDPHeaderSize * packetsSent);
+			int totalBytesSent = bytesSent + (kUDPHeaderSize * packetsSent);
 			float seconds = (float)((now - statsStartTime) / 1000.0);
-			float Bps = total_bytes_sent / seconds;
-			float udp_overhead = (float)(100.0 * (kUDPHeaderSize * packetsSent) / bytesSent);
+			float bytesPerSecond = totalBytesSent / seconds;
+			float udpOverhead = (float)(100.0 * (kUDPHeaderSize * packetsSent) / bytesSent);
 
-			kbpsSent = (int) (Bps / 1024);
+			kbpsSent = (int) (bytesPerSecond / 1024);
 
-			Log($"Network Stats -- Bandwidth: {kbpsSent:F} KBps   Packets Sent: {packetsSent:D5} ({(float)packetsSent * 1000 / (now - statsStartTime):F} pps)   KB Sent: {total_bytes_sent / 1024.0:F}    UDP Overhead: {udp_overhead:F} %%.{Environment.NewLine}");
+			Log(
+				$"Network Stats -- "
+				+ $"Bandwidth: {kbpsSent:F} KBps   "
+				+ $"Packets Sent: {packetsSent:D5} ({(float) packetsSent * 1000 / (now - statsStartTime):F} pps)   "
+				+ $"KB Sent: {totalBytesSent / 1024.0:F}    "
+				+ $"UDP Overhead: {udpOverhead:F} %%.{Environment.NewLine}"
+			);
 		}
 
 		protected void QueueEvent(ref Event evt) {
@@ -376,7 +382,6 @@ namespace GGPort {
 
 			packetsSent++;
 			lastSendTime = Platform.GetCurrentTimeMS();
-			bytesSent += msg.PacketSize();
 
 			msg.header.magic = magicNumber;
 			msg.header.SequenceNumber = nextSendSequenceNumber++;
@@ -412,9 +417,9 @@ namespace GGPort {
 					}
 					
 					BinaryFormatter formatter = new BinaryFormatter(); // LOH relates to here as well
-					using (MemoryStream ms = new MemoryStream(entry.msg.PacketSize())) {
+					using (MemoryStream ms = new MemoryStream()) {
 						formatter.Serialize(ms, entry.msg);
-						udp.SendTo(ms.ToArray(), (int) ms.Length, 0, entry.dest_addr);
+						bytesSent += udp.SendTo(ms.ToArray(), (int) ms.Length, 0, entry.dest_addr);
 					} // TODO optimize/refactor
 
 					entry.msg = default;
@@ -425,10 +430,10 @@ namespace GGPort {
 			if (ooPacket.msg != null && ooPacket.send_time < Platform.GetCurrentTimeMS()) {
 				Log("sending rogue oop!");
 					
-				BinaryFormatter b = new BinaryFormatter();
-				using (MemoryStream ms = new MemoryStream((int) ooPacket.msg?.PacketSize())) {
-					b.Serialize(ms, (UDPMessage) ooPacket.msg); // TODO does this needs to cast from <UdpMsg?> to <UdpMsg> ???
-					udp.SendTo(ms.ToArray(), (int) ms.Length, 0, ooPacket.dest_addr);
+				BinaryFormatter formatter = new BinaryFormatter();
+				using (MemoryStream ms = new MemoryStream()) {
+					formatter.Serialize(ms, (UDPMessage) ooPacket.msg); // TODO does this needs to cast from <UdpMsg?> to <UdpMsg> ???
+					bytesSent += udp.SendTo(ms.ToArray(), (int) ms.Length, 0, ooPacket.dest_addr);
 				} // TODO optimize/refactor
 
 				ooPacket.msg = null; // TODO does this need to be nullable?

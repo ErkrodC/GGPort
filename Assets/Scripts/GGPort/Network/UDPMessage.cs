@@ -85,52 +85,7 @@ namespace GGPort {
 			input = t == MsgType.Input ? new Input() : default;
 			inputAck = default;
 		}
-		
-		// TODO remove unsafe
-		public unsafe int PacketSize() {
-			return sizeof(Header) + PayloadSize();
-		}
 
-		// TODO remove unsafe
-		public unsafe int PayloadSize() {
-			/*switch (hdr.type) {
-				case MsgType.SyncRequest:   return sizeof(SyncRequest);
-				case MsgType.SyncReply:     return sizeof(SyncReply);
-				case MsgType.QualityReport: return sizeof(QualityReport);
-				case MsgType.QualityReply:  return sizeof(QualityReply);
-				case MsgType.InputAck:      return sizeof(InputAck);
-				case MsgType.KeepAlive:     return 0;
-				case MsgType.Input:
-					int size = 0;
-					size += sizeof(connect_status) * UDP_MSG_MAX_PLAYERS; // NOTE should be size of array pointer?
-					size += sizeof(uint);
-					size += sizeof(int);
-					size += sizeof(int);
-					size += sizeof(ushort);
-					size += sizeof(byte);
-					size += (input.num_bits + 7) / 8;
-					return size;
-			}
-			
-			throw new ArgumentException();*/
-			
-			int size = 0;
-			size += sizeof(ConnectStatus) * UDP_MSG_MAX_PLAYERS; // NOTE should be size of array pointer?
-			size += sizeof(uint);
-			size += sizeof(int);
-			size += sizeof(int);
-			size += sizeof(ushort);
-			size += sizeof(byte);
-			size += input == null ? 0 : (input.numBits + 7) / 8;
-			size += sizeof(SyncRequest);
-			size += sizeof(SyncReply);
-			size += sizeof(QualityReport);
-			size += sizeof(QualityReply);
-			size += sizeof(InputAck);
-
-			return size;
-		}
-		
 		public enum MsgType : byte {
 			Invalid       = 0,
 			SyncRequest   = 1,

@@ -18,7 +18,7 @@ namespace VectorWar {
 		private static GameState GameState = new GameState();
 		private static readonly NonGameState NonGameState = new NonGameState();
 		private static Session session = null;
-		private static RendererWrapper renderer = RendererWrapper.instance;
+		public static event SessionCallbacks.LogDelegate LogCallback = delegate(string message) {  };
 
 		[Flags]
 		public enum Input {
@@ -45,7 +45,8 @@ namespace VectorWar {
 				SaveGameState = SaveGameState,
 				FreeBuffer = FreeBuffer,
 				OnEvent = OnEvent,
-				LogGameState = LogGameState
+				LogGameState = LogGameState,
+				LogText = LogCallback
 			};
 
 #if SYNC_TEST
@@ -76,7 +77,7 @@ namespace VectorWar {
 			}
 
 			PerfMon.ggpoutil_perfmon_init();
-			renderer.SetStatusText("Connecting to peers.");
+			TextHelper.instance.SetStatusText("Connecting to peers.");
 		}
 
 		// Create a new spectator session
@@ -111,7 +112,7 @@ namespace VectorWar {
 
 			PerfMon.ggpoutil_perfmon_init();
 
-			renderer.SetStatusText("Starting new spectator session");
+			TextHelper.instance.SetStatusText("Starting new spectator session");
 		}
 		
 		// Disconnects a player from this session.
@@ -124,7 +125,7 @@ namespace VectorWar {
 				? $"Disconnected player {player}.{Environment.NewLine}"
 				: $"Error while disconnecting player (err:{result}).{Environment.NewLine}";
 
-			renderer.SetStatusText(logMsg);
+			TextHelper.instance.SetStatusText(logMsg);
 		}
 
 		// Draws the current frame without modifying the game state.
@@ -248,7 +249,7 @@ namespace VectorWar {
 				session = null;
 			}
 
-			renderer = null;
+			TextHelper.instance = null;
 		}
 
 		/* 
@@ -304,7 +305,7 @@ namespace VectorWar {
 			switch (info.code) {
 				case EventCode.ConnectedToPeer:
 					NonGameState.SetConnectState(info.connected.player, PlayerConnectState.Synchronizing);
-					renderer.SetStatusText($"Connected to player {info.connected.player.HandleValue}");
+					TextHelper.instance.SetStatusText($"Connected to player {info.connected.player.HandleValue}");
 					break;
 				case EventCode.SynchronizingWithPeer:
 					int progress = 100 * info.synchronizing.count / info.synchronizing.total;
@@ -315,7 +316,7 @@ namespace VectorWar {
 					break;
 				case EventCode.Running:
 					NonGameState.SetConnectState(PlayerConnectState.Running);
-					renderer.SetStatusText("");
+					TextHelper.instance.SetStatusText("");
 					break;
 				case EventCode.ConnectionInterrupted:
 					NonGameState.SetDisconnectTimeout(info.connectionInterrupted.player,

@@ -77,11 +77,13 @@ namespace GGPort {
 			}
 
 			// Preload the ROM
+			LogCallback += callbacks.LogText;
 			callbacks.BeginGame(gameName);
 		}
 
 		~PeerToPeerBackend() {
 			endpoints = null;
+			LogCallback -= callbacks.LogText;
 		}
 
 		public override unsafe ErrorCode Idle(int timeout) {

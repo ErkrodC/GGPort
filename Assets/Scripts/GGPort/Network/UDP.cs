@@ -15,7 +15,8 @@ using System.Runtime.Serialization.Formatters.Binary;
 namespace GGPort {
 	public class UDP : IPollSink {
 		public const int MAX_UDP_ENDPOINTS = 16;
-		public const int MAX_UDP_PACKET_SIZE = 4096;
+		// TODO readdress serialization, no need for type data to be sent with custom protocol
+		public const int MAX_UDP_PACKET_SIZE = /*4096*/ 5437;
 		
 		// Network transmission information
 		protected Socket socket;
@@ -50,15 +51,17 @@ namespace GGPort {
 			socket = CreateSocket(port, 0);
 		}
 	   
-		public void SendTo(byte[] buffer, int len, SocketFlags flags, IPEndPoint dst) {
-
+		public int SendTo(byte[] buffer, int len, SocketFlags flags, IPEndPoint dst) {
+			int sentBytes = 0;
 			try {
-				int res = socket.SendTo(buffer, len, flags, dst);
-				Log($"sent packet length {len} to {dst.Address}:{dst.Port} (ret:{res}).{Environment.NewLine}");
+				 sentBytes = socket.SendTo(buffer, len, flags, dst);
+				Log($"sent packet length {len} to {dst.Address}:{dst.Port} (ret:{sentBytes}).{Environment.NewLine}");
 			} catch (Exception e) {
 				Log($"{e.Message}.{Environment.NewLine}");
 				throw;
 			}
+
+			return sentBytes;
 		}
 
 		public virtual bool OnLoopPoll(object cookie) {

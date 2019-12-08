@@ -249,6 +249,10 @@ namespace GGPort {
 		public delegate bool OnEventDelegate(ref Event info);
 
 		public OnEventDelegate OnEvent { get; set; }
+
+		public delegate void LogDelegate(string message);
+		
+		public LogDelegate LogText { get; set; }
 	}
 
 	/*
