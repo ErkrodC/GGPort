@@ -24,6 +24,17 @@ namespace GGPort {
 			return Frame == -1;
 		}
 
+		public bool this[int bitIndex] {
+			get => (Bits[bitIndex / 8] & 1 << bitIndex % 8) != 0;
+			set {
+				if (value) {
+					Bits[bitIndex/8] |= (byte) (1 << bitIndex % 8);
+				} else {
+					Bits[bitIndex / 8] &= (byte) ~(1 << bitIndex % 8);
+				}
+			}
+		}
+
 		public void Init(int frame, byte[] bits, int size, int offset) {
 			Platform.Assert(0 < size && size <= kMaxBytes);
 			
@@ -59,18 +70,6 @@ namespace GGPort {
 					Bits[i] = bits[i];
 				}
 			}
-		}
-
-		public bool Value(int i) {
-			return (Bits[i/8] & (1 << (i%8))) != 0;
-		}
-
-		public void Set(int i) {
-			Bits[i/8] |= (byte) (1 << (i%8));
-		}
-
-		public void Clear(int i) {
-			Bits[i/8] &= (byte) ~(1 << (i%8));
 		}
 
 		public void Erase() {

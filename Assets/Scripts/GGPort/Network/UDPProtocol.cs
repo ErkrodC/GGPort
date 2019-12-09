@@ -450,45 +450,39 @@ namespace GGPort {
 			int offset = 0;
 
 			if (pendingOutgoingInputs.Count != 0) {
-				GameInput last = lastAckedInput;
-				byte[] bits = msg.input.bits;
-
 				GameInput outputQueueFront = pendingOutgoingInputs.Peek();
 				msg.input.startFrame = (uint) outputQueueFront.Frame;
 				msg.input.inputSize = (byte) outputQueueFront.Size;
 
-				Platform.Assert(last.Frame == -1 || last.Frame + 1 == msg.input.startFrame);
+				Platform.Assert(lastAckedInput.Frame == -1 || lastAckedInput.Frame + 1 == msg.input.startFrame);
 				
 				foreach (GameInput pendingInput in pendingOutgoingInputs) {
 					bool currentEqualsLastBits = true;
 					for (int j = 0; j < pendingInput.Size; j++) {
-						if (pendingInput.Bits[j] != last.Bits[j]) {
+						if (pendingInput.Bits[j] != lastAckedInput.Bits[j]) {
 							currentEqualsLastBits = false;
 							break;
 						}
 					}
 					
 					if (!currentEqualsLastBits) {
-						Platform.Assert(GameInput.kMaxBytes * GameInput.kMaxPlayers * 8 < 1 << BitVector.BITVECTOR_NIBBLE_SIZE);
+						Platform.Assert(GameInput.kMaxBytes * GameInput.kMaxPlayers * 8 < 1 << BitVector.kBitVectorNibbleSize);
 
-						for (int j = 0; j < pendingInput.Size * 8; j++) {
-							Platform.Assert(j < 1 << BitVector.BITVECTOR_NIBBLE_SIZE);
+						for (int bitIndex = 0; bitIndex < pendingInput.Size * 8; bitIndex++) {
+							Platform.Assert(bitIndex < 1 << BitVector.kBitVectorNibbleSize);
+							bool pendingInputBit = pendingInput[bitIndex];
+							bool lastAckedInputBit = lastAckedInput[bitIndex];
 							
-							if (pendingInput.Value(j) != last.Value(j)) {
-								BitVector.SetBit(msg.input.bits, ref offset);
-								if (pendingInput.Value(j)) {
-									BitVector.SetBit(bits, ref offset);
-								} else {
-									BitVector.ClearBit(bits, ref offset);
-								}
-
-								BitVector.WriteNibblet(bits, j, ref offset);
+							if (pendingInputBit != lastAckedInputBit) {
+								BitVector.WriteBit(msg.input.bits, ref offset, true);
+								BitVector.WriteBit(msg.input.bits, ref offset, pendingInputBit);
+								BitVector.WriteNibblet(msg.input.bits, bitIndex, ref offset);
 							}
 						}
 					}
 
-					BitVector.ClearBit(msg.input.bits, ref offset);
-					last = lastSentInput = pendingInput;
+					BitVector.WriteBit(msg.input.bits, ref offset, false);
+					lastAckedInput = lastSentInput = pendingInput;
 				}
 			} else {
 				msg.input.startFrame = 0;
@@ -579,10 +573,10 @@ namespace GGPort {
 			return true;
 		}
 
-		protected bool OnInput(ref UDPMessage msg, int len) {
+		protected bool OnInput(ref UDPMessage incomingMsg, int len) {
 			// If a disconnect is requested, go ahead and disconnect now.
-			bool disconnect_requested = msg.input.disconnectRequested;
-			if (disconnect_requested) {
+			bool disconnectRequested = incomingMsg.input.disconnectRequested;
+			if (disconnectRequested) {
 				if (currentState != State.Disconnected && !disconnectEventSent) {
 					Log($"Disconnecting endpoint on remote request.{Environment.NewLine}");
 
@@ -592,7 +586,7 @@ namespace GGPort {
 				}
 			} else {
 				// Update the peer connection status if this peer is still considered to be part of the network.
-				UDPMessage.ConnectStatus[] remoteStatus = msg.input.peerConnectStatus;
+				UDPMessage.ConnectStatus[] remoteStatus = incomingMsg.input.peerConnectStatus;
 				for (int i = 0; i < peerConnectStatus.Length; i++) {
 					Platform.Assert(remoteStatus[i].LastFrame >= peerConnectStatus[i].LastFrame);
 					
@@ -606,15 +600,15 @@ namespace GGPort {
 
 			// Decompress the input.
 			int lastReceivedFrameNumber = lastReceivedInput.Frame;
-			if (msg.input.numBits != 0) {
+			if (incomingMsg.input.numBits != 0) {
 				int offset = 0;
-				byte[] bits = msg.input.bits;
-				int numBits = msg.input.numBits;
-				int currentFrame = (int) msg.input.startFrame; // TODO ecgh
+				byte[] incomingBits = incomingMsg.input.bits;
+				int numBits = incomingMsg.input.numBits;
+				int currentFrame = (int) incomingMsg.input.startFrame; // TODO ecgh
 
-				lastReceivedInput.Size = msg.input.inputSize;
+				lastReceivedInput.Size = incomingMsg.input.inputSize;
 				if (lastReceivedInput.Frame < 0) {
-					lastReceivedInput.Frame = (int) (msg.input.startFrame - 1); // TODO ecgh
+					lastReceivedInput.Frame = (int) (incomingMsg.input.startFrame - 1); // TODO ecgh
 				}
 
 				while (offset < numBits) {
@@ -626,15 +620,11 @@ namespace GGPort {
 					
 					bool useInputs = currentFrame == lastReceivedInput.Frame + 1;
 
-					while (BitVector.ReadBit(bits, ref offset) != 0) {
-						int on = BitVector.ReadBit(bits, ref offset);
-						int button = BitVector.ReadNibblet(bits, ref offset);
+					while (BitVector.ReadBit(incomingBits, ref offset) != 0) {
 						if (useInputs) {
-							if (on != 0) {
-								lastReceivedInput.Set(button);
-							} else {
-								lastReceivedInput.Clear(button);
-							}
+							int buttonBitIndex = BitVector.ReadNibblet(incomingBits, ref offset);
+							bool isOn = BitVector.ReadBit(incomingBits, ref offset) != 0;
+							lastReceivedInput[buttonBitIndex] = isOn;
 						}
 					}
 
@@ -671,7 +661,7 @@ namespace GGPort {
 			Platform.Assert(lastReceivedInput.Frame >= lastReceivedFrameNumber);
 
 			// Get rid of our buffered input
-			while (pendingOutgoingInputs.Count != 0 && pendingOutgoingInputs.Peek().Frame < msg.input.ackFrame) {
+			while (pendingOutgoingInputs.Count != 0 && pendingOutgoingInputs.Peek().Frame < incomingMsg.input.ackFrame) {
 				Log($"Throwing away pending output frame {pendingOutgoingInputs.Peek().Frame}{Environment.NewLine}");
 				lastAckedInput = pendingOutgoingInputs.Pop();
 			}
