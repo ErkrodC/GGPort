@@ -21,20 +21,20 @@ namespace GGPort {
 
 		public T this[int i] {
 			get {
-				if (i >= Count) { throw new IndexOutOfRangeException(); }
+				Platform.Assert(i < Count);
 
 				return elements[(tail + i) % capacity];
 			}
 		}
 
 		public ref T Peek() {
-			if (Count <= 0 || Count > capacity) { throw new IndexOutOfRangeException(); }
+			Platform.Assert(0 < Count && Count <= capacity);
 
 			return ref elements[tail];
 		}
 
 		public T Pop() {
-			if (Count <= 0 || Count > capacity) { throw new IndexOutOfRangeException(); }
+			Platform.Assert(0 < Count && Count <= capacity);
 
 			T value = elements[tail];
 
@@ -45,7 +45,7 @@ namespace GGPort {
 		}
 
 		public void Push(T value) {
-			if (Count >= capacity) { throw new IndexOutOfRangeException(); }
+			Platform.Assert(Count < capacity);
 
 			elements[head] = value;
 			head = (head + 1) % capacity;
@@ -83,7 +83,8 @@ namespace GGPort {
 					try {
 						return queue[position];
 					} catch (IndexOutOfRangeException) {
-						throw new InvalidOperationException();
+						Platform.AssertFailed("IndexOutOfRangeException");
+						throw;
 					}
 				}
 			}

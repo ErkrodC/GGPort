@@ -24,8 +24,8 @@ namespace GGPort {
 		*
 		* local_port - The port GGPO should bind to for UDP traffic.
 		*/
-		public static ErrorCode StartSession(out Session session, ref SessionCallbacks sessionCallbacks, string gameName, int numPlayers, int inputSize, ushort localPort) {
-			session = new PeerToPeerBackend(ref sessionCallbacks, gameName, localPort, numPlayers, inputSize);
+		public static ErrorCode StartSession(out Session session, SessionCallbacks sessionCallbacks, string gameName, int numPlayers, int inputSize, ushort localPort) {
+			session = new PeerToPeerBackend(sessionCallbacks, gameName, localPort, numPlayers, inputSize);
 			return ErrorCode.Success;
 		}
 
@@ -86,14 +86,14 @@ namespace GGPort {
 		*/
 		public static ErrorCode StartSpectating(
 			out Session session,
-			ref SessionCallbacks sessionCallbacks,
+			SessionCallbacks sessionCallbacks,
 			string gameName,
 			int numPlayers,
 			int inputSize,
 			ushort localPort,
 			IPEndPoint hostEndPoint
 		) {
-			session = new SpectatorBackend(ref sessionCallbacks, gameName, localPort, numPlayers, inputSize, hostEndPoint);
+			session = new SpectatorBackend(sessionCallbacks, gameName, localPort, numPlayers, inputSize, hostEndPoint);
 			return ErrorCode.Success;
 		}
 		
@@ -116,7 +116,7 @@ namespace GGPort {
 		* handle - An out parameter to a handle used to identify this player in the future.
 		* (e.g. in the on_event callbacks).
 		*/
-		public abstract ErrorCode AddPlayer(ref Player player, out PlayerHandle handle);
+		public abstract ErrorCode AddPlayer(Player player, out PlayerHandle handle);
 		
 		/*
 		* Used to notify GGPO.net of inputs that should be trasmitted to remote
@@ -148,7 +148,7 @@ namespace GGPort {
 		* that player will be zeroed and the i-th flag will be set.  For example,
 		* if only player 3 has disconnected, disconnect flags will be 8 (i.e. 1 << 3).
 		*/
-		public abstract ErrorCode SynchronizeInput(ref Array values, int size, ref int disconnectFlags);
+		public abstract ErrorCode SynchronizeInput(Array values, int size, ref int disconnectFlags);
 		
 		/*
 		* You should call ggpo_advance_frame to notify GGPO.net that you have

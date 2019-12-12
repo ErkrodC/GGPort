@@ -182,7 +182,7 @@ namespace GGPort {
 	* your application must implement.  GGPO.net will periodically call these
 	* functions during the game.  All callback functions must be implemented.
 	*/
-	public struct SessionCallbacks {
+	public class SessionCallbacks {
 		/*
 		* begin_game callback - This callback has been deprecated.  You must
 		* implement it, but should ignore the 'game' parameter.
@@ -246,7 +246,7 @@ namespace GGPort {
 		* on_event - Notification that something has happened.  See the GGPOEventCode
 		* structure above for more information.
 		*/
-		public delegate bool OnEventDelegate(ref Event info);
+		public delegate bool OnEventDelegate(Event info);
 
 		public OnEventDelegate OnEvent { get; set; }
 

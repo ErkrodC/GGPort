@@ -25,7 +25,7 @@ namespace GGPort {
 
 		public static int GetProcessID() { return Process.GetCurrentProcess().Id; }
 		
-		public static void Assert(bool expression, string msg = "GGPO Assertion Failed.", [CallerFilePath] string callerFilePath = "", [CallerMemberName] string callerName = "", [CallerLineNumber] int callerLineNumber = -1) {
+		public static void Assert(bool expression, string msg = "Assertion Failed.", [CallerFilePath] string callerFilePath = "", [CallerMemberName] string callerName = "", [CallerLineNumber] int callerLineNumber = -1) {
 			do {
 				if (!(expression)) {
 					AssertFailedInternal(msg, callerFilePath, callerName, callerLineNumber);
@@ -41,14 +41,14 @@ namespace GGPort {
 			if (!string.IsNullOrEmpty(callerFilePath)) {
 				string[] callerFilePathSplit = callerFilePath.Split('/', '\\');
 				string fileName = callerFilePathSplit[callerFilePathSplit.Length - 1];
-				msg += $"{Environment.NewLine}\tIn {fileName}";
+				msg += $"{Environment.NewLine}\t\t{(callerLineNumber == -1 ? "In ": "@ ")} {fileName}";
+				
+				if (callerLineNumber != -1) {
+					msg += $":{callerLineNumber}";
+				}
 
 				if (!string.IsNullOrEmpty(callerName)) {
-					msg += $", {callerName}";
-
-					if (callerLineNumber != -1) {
-						msg += $":{callerLineNumber}";
-					}
+					msg += $",{Environment.NewLine}\t\tMethod: {callerName}";
 				}
 			}
 			

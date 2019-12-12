@@ -145,7 +145,7 @@ namespace GGPort {
 
 			Platform.Assert(requestedFrame >= inputs[tail].Frame);
 
-			if (prediction.Frame == GameInput.kNullFrame) {
+			if (prediction.IsNull()) {
 				/*
 				* If the frame requested is in our range, fetch it out of the queue and
 				* return it.
@@ -198,8 +198,6 @@ namespace GGPort {
 		}
 
 		public void AddInput(ref GameInput input) {
-			int new_frame;
-
 			Log($"adding input frame number {input.Frame} to queue.{Environment.NewLine}");
 
 			/*
@@ -214,9 +212,9 @@ namespace GGPort {
 			* Move the queue head to the correct point in preparation to
 			* input the frame into the queue.
 			*/
-			new_frame = AdvanceQueueHead(input.Frame);
-			if (new_frame != GameInput.kNullFrame) {
-				AddDelayedInputToQueue(ref input, new_frame);
+			int newFrame = AdvanceQueueHead(input.Frame);
+			if (newFrame != GameInput.kNullFrame) {
+				AddDelayedInputToQueue(input, newFrame);
 			}
 
 			/*
@@ -224,37 +222,37 @@ namespace GGPort {
 			* frame to GameInput::NullFrame for frames that get dropped (by
 			* design).
 			*/
-			input.Frame = new_frame;
+			input.Frame = newFrame;
 		}
 
 		protected int AdvanceQueueHead(int frame) {
 			Log($"advancing queue head to frame {frame}.{Environment.NewLine}");
 
-			int expected_frame = firstFrame ? 0 : inputs[PreviousFrame(head)].Frame + 1;
+			int expectedFrame = firstFrame ? 0 : inputs[PreviousFrame(head)].Frame + 1;
 
 			frame += frameDelay;
 
-			if (expected_frame > frame) {
+			if (expectedFrame > frame) {
 				/*
 				* This can occur when the frame delay has dropped since the last
 				* time we shoved a frame into the system.  In this case, there's
 				* no room on the queue.  Toss it.
 				*/
-				Log($"Dropping input frame {frame} (expected next frame to be {expected_frame}).{Environment.NewLine}");
+				Log($"Dropping input frame {frame} (expected next frame to be {expectedFrame}).{Environment.NewLine}");
 				return GameInput.kNullFrame;
 			}
 
-			while (expected_frame < frame) {
+			while (expectedFrame < frame) {
 				/*
 				* This can occur when the frame delay has been increased since the last
 				* time we shoved a frame into the system.  We need to replicate the
 				* last frame in the queue several times in order to fill the space
 				* left.
 				*/
-				Log($"Adding padding frame {expected_frame} to account for change in frame delay.{Environment.NewLine}");
+				Log($"Adding padding frame {expectedFrame} to account for change in frame delay.{Environment.NewLine}");
 				
-				AddDelayedInputToQueue(ref inputs[PreviousFrame(head)], expected_frame);
-				expected_frame++;
+				AddDelayedInputToQueue(inputs[PreviousFrame(head)], expectedFrame);
+				expectedFrame++;
 			}
 
 			Platform.Assert(frame == 0 || frame == inputs[PreviousFrame(head)].Frame + 1);
@@ -262,7 +260,7 @@ namespace GGPort {
 			return frame;
 		}
 
-		protected void AddDelayedInputToQueue(ref GameInput input, int frameNumber) {
+		private void AddDelayedInputToQueue(GameInput input, int frameNumber) {
 			Log($"adding delayed input frame number {frameNumber} to queue.{Environment.NewLine}");
 
 			Platform.Assert(input.Size == prediction.Size);
@@ -280,7 +278,7 @@ namespace GGPort {
 
 			lastAddedFrame = frameNumber;
 
-			if (prediction.Frame != GameInput.kNullFrame) {
+			if (!prediction.IsNull()) {
 				Platform.Assert(frameNumber == prediction.Frame);
 
 				/*
@@ -289,7 +287,7 @@ namespace GGPort {
 				* remember the first input which was incorrect so we can report it
 				* in GetFirstIncorrectFrame()
 				*/
-				if (firstIncorrectFrame == GameInput.kNullFrame && !prediction.Equal(ref input, true)) {
+				if (firstIncorrectFrame == GameInput.kNullFrame && !prediction.Equal(input, true)) {
 					Log($"frame {frameNumber} does not match prediction.  marking error.{Environment.NewLine}");
 					firstIncorrectFrame = frameNumber;
 				}

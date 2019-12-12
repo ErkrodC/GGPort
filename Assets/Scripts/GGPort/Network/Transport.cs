@@ -13,35 +13,35 @@ using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
 
 namespace GGPort {
-	public class UDP : IPollSink {
-		public const int MAX_UDP_ENDPOINTS = 16;
+	public class Transport : IPollSink {
+		public const int kMaxUDPEndpoints = 16;
 		// TODO readdress serialization, no need for type data to be sent with custom protocol
-		public const int MAX_UDP_PACKET_SIZE = /*4096*/ 5437;
+		private const int kMaxUDPPacketSize = /*4096*/ 4096 * 2;
 		
 		// Network transmission information
-		protected Socket socket;
+		private Socket socket;
 
 		// state management
-		protected Callbacks callbacks;
-		protected Poll poll;
+		private ICallbacks callbacks;
+		private Poll poll;
 
 		protected static void Log(string msg) {
 			
 		}
 
-		public UDP() {
+		public Transport() {
 			socket = null;
 			callbacks = null;
 		}
 
-		~UDP() {
-			if (socket != null) {
-				socket.Close();
-				socket = null;
-			}
+		~Transport() {
+			if (socket == null) { return; }
+
+			socket.Close();
+			socket = null;
 		}
 
-		public void Init(ushort port, ref Poll poll, Callbacks callbacks) {
+		public void Init(ushort port, Poll poll, ICallbacks callbacks) {
 			this.callbacks = callbacks;
 
 			this.poll = poll;
@@ -56,8 +56,9 @@ namespace GGPort {
 			try {
 				 sentBytes = socket.SendTo(buffer, len, flags, dst);
 				Log($"sent packet length {len} to {dst.Address}:{dst.Port} (ret:{sentBytes}).{Environment.NewLine}");
-			} catch (Exception e) {
-				Log($"{e.Message}.{Environment.NewLine}");
+			} catch (Exception exception) {
+				Log($"{exception.Message}.{Environment.NewLine}");
+				Platform.AssertFailed(exception.Message);
 				throw;
 			}
 
@@ -65,31 +66,32 @@ namespace GGPort {
 		}
 
 		public virtual bool OnLoopPoll(object cookie) {
-			byte[] receiveBuffer = new byte[MAX_UDP_PACKET_SIZE];
+			byte[] receiveBuffer = new byte[kMaxUDPPacketSize];
 
-			EndPoint senderEndPoint = new IPEndPoint(IPAddress.Any, 0);
+			EndPoint fromEndPoint = new IPEndPoint(IPAddress.Any, 0);
 			
 			for (;;) {
 				try {
 					if (socket.Available <= 0) {
 						break;
 					}
-					int len = socket.ReceiveFrom(receiveBuffer, MAX_UDP_PACKET_SIZE, SocketFlags.None, ref senderEndPoint);
+					int len = socket.ReceiveFrom(receiveBuffer, kMaxUDPPacketSize, SocketFlags.None, ref fromEndPoint);
 
-					if (senderEndPoint is IPEndPoint recvAddrIP) {
-						Log($"recvfrom returned (len:{len}  from:{recvAddrIP.Address}:{recvAddrIP.Port}).{Environment.NewLine}");
+					if (fromEndPoint is IPEndPoint fromIPEndPoint) {
+						Log($"recvfrom returned (len:{len}  from:{fromIPEndPoint.Address}:{fromIPEndPoint.Port}).{Environment.NewLine}");
 						IFormatter br = new BinaryFormatter();
 						using (MemoryStream ms = new MemoryStream(receiveBuffer)) {
-							UDPMessage msg = (UDPMessage) br.Deserialize(ms); // TODO deserialization probably doesn't work? why does it work for syncing but not input?
-							callbacks.OnMsg(recvAddrIP, ref msg, len);
+							PeerMessage msg = (PeerMessage) br.Deserialize(ms); // TODO deserialization probably doesn't work? why does it work for syncing but not input?
+							callbacks.OnMsg(fromIPEndPoint, msg);
 						} // TODO optimize refactor
 					} else {
-						Platform.AssertFailed($"Expecting endpoint of type {nameof(IPEndPoint)}, but was given {senderEndPoint.GetType()}.");
+						Platform.AssertFailed($"Expecting endpoint of type {nameof(IPEndPoint)}, but was given {fromEndPoint.GetType()}.");
 					}
 
 					// TODO: handle len == 0... indicates a disconnect.
-				} catch (Exception e) {
-					Log($"{e.Message}{Environment.NewLine}");
+				} catch (Exception exception) {
+					Log($"{exception.Message}{Environment.NewLine}");
+					Platform.AssertFailed(exception.Message);
 					break;
 				} 
 			}
@@ -111,7 +113,7 @@ namespace GGPort {
 					return s;
 				} catch (Exception e) {
 					Console.WriteLine(e);
-					//break;
+					//break; // TODO remove
 				}
 			}
 			
@@ -120,6 +122,7 @@ namespace GGPort {
 		}
 		
 		// TODO fix param names, 4 fxns
+		// TODO in fact, could probably use async C# sockets over polling 
 		public virtual bool OnHandlePoll(object TODO) { return true; }
 		public virtual bool OnMsgPoll(object TODO) { return true; }
 		public virtual bool OnPeriodicPoll(object TODO0, long TODO1) { return true; }
@@ -130,8 +133,8 @@ namespace GGPort {
 			public readonly float kbps_sent;
 		}
 
-		public interface Callbacks {
-			void OnMsg(IPEndPoint from, ref UDPMessage msg, int len);
+		public interface ICallbacks {
+			void OnMsg(IPEndPoint from, PeerMessage msg);
 		}
 	}
 }

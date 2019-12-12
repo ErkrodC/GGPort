@@ -1,0 +1,153 @@
+﻿/* -----------------------------------------------------------------------
+* GGPO.net (http://ggpo.net)  -  Copyright 2009 GroundStorm Studios, LLC.
+*
+* Use of this software is governed by the MIT license that can be found
+* in the LICENSE file.
+*/
+
+using System;
+using System.Runtime.InteropServices;
+using System.Runtime.Serialization;
+
+namespace GGPort {
+	// TODO seperate out into smaller derived classes, this used to be a union.
+	[Serializable, StructLayout(LayoutKind.Explicit)]
+	public struct PeerMessage {
+		public const ushort kMaxCompressedBits = 4096;
+		public const byte kMaxPlayers = 4; // TODO probably doesn't belong in this class, i.e. used in a lot of places
+		
+		[FieldOffset(0)] public Header header;
+		[FieldOffset(5)] public SyncRequest syncRequest;
+		[FieldOffset(5)] public SyncReply syncReply;
+		[FieldOffset(5)] public QualityReport qualityReport;
+		[FieldOffset(5)] public QualityReply qualityReply;
+		[FieldOffset(5)] public Input input;
+		[FieldOffset(5)] public InputAck inputAck;
+		
+		[Serializable]
+		public struct Header {
+			public ushort MagicNumber { get; set; }
+			public ushort SequenceNumber { get; set; }
+			public MsgType type; // packet type
+		}
+		
+		[Serializable]
+		public struct SyncRequest {
+			public uint randomRequest; /* please reply back with this random data */
+			public ushort remoteMagic;
+			public byte remoteEndpoint; // LOH is this set somewhere in the c++?
+		}
+		
+		[Serializable]
+		public struct SyncReply {
+			public uint randomReply; /* OK, here's your random data back */
+		}
+		
+		[Serializable]
+		public struct QualityReport {
+			public sbyte frameAdvantage; /* what's the other guy's frame advantage? */
+			public long ping;
+		}
+		
+		[Serializable]
+		public struct QualityReply {
+			public long pong;
+		}
+
+		[Serializable]
+		public unsafe struct Input : ISerializable {
+			public int startFrame;
+
+			// TODO address bitfields
+			public bool disconnectRequested; //:1;
+			public int ackFrame; //:31;
+
+			public ushort numBits;
+			public byte inputSize;  // XXX: shouldn't be in every single packet!
+			
+			private fixed bool peerDisconnectedFlags[kMaxPlayers];
+			private fixed int peerLastFrames[kMaxPlayers];
+			public fixed byte bits[kMaxCompressedBits]; /* must be last */
+
+			public ConnectStatus GetPeerConnectStatus(int index) {
+				return new ConnectStatus {
+					IsDisconnected = peerDisconnectedFlags[index],
+					LastFrame = peerLastFrames[index]
+				};
+			}
+
+			public void SetPeerConnectStatus(int index, ConnectStatus peerConnectStatus) {
+				peerDisconnectedFlags[index] = peerConnectStatus.IsDisconnected;
+				peerLastFrames[index] = peerConnectStatus.LastFrame;
+			}
+
+			public void GetConnectStatuses(ref ConnectStatus[] connectStatuses) {
+				for (int i = 0; i < kMaxPlayers; i++) {
+					connectStatuses[i] = new ConnectStatus {
+						IsDisconnected = peerDisconnectedFlags[i],
+						LastFrame = peerLastFrames[i]
+					};
+				}
+			}
+
+			public void GetObjectData(SerializationInfo info, StreamingContext context) {
+				bool[] peerDisconnectedFlagsArray = new bool[kMaxPlayers];
+				int[] peerLastFramesArray = new int[kMaxPlayers];
+				for (int i = 0; i < kMaxPlayers; i++) {
+					peerDisconnectedFlagsArray[i] = peerDisconnectedFlags[i];
+					peerLastFramesArray[i] = peerLastFrames[i];
+				}
+
+				byte[] bitsArray = new byte[kMaxCompressedBits];
+				for (int i = 0; i < kMaxCompressedBits; i++) {
+					bitsArray[i] = bits[i];
+				}
+				
+				info.AddValue(nameof(disconnectRequested), disconnectRequested, typeof(bool));
+				info.AddValue(nameof(ackFrame), ackFrame, typeof(int));
+				info.AddValue(nameof(numBits), numBits, typeof(ushort));
+				info.AddValue(nameof(inputSize), inputSize, typeof(byte));
+				info.AddValue(nameof(peerDisconnectedFlags), peerDisconnectedFlagsArray, typeof(bool[]));
+				info.AddValue(nameof(peerLastFramesArray), peerLastFramesArray, typeof(int[]));
+				info.AddValue(nameof(bits), bitsArray, typeof(byte[]));
+			}
+		}
+
+		[Serializable]
+		public struct InputAck {
+			// TODO address bitfields
+			public int ackFrame; //:31;
+		}
+
+		public PeerMessage(MsgType t) {
+			header = new Header {
+				type = t
+			};
+
+			syncRequest = default;
+			syncReply = default;
+			qualityReport = default;
+			qualityReply = default;
+			input = t == MsgType.Input ? new Input() : default;
+			inputAck = default;
+		}
+
+		public enum MsgType : byte {
+			Invalid       = 0,
+			SyncRequest   = 1,
+			SyncReply     = 2,
+			Input         = 3,
+			QualityReport = 4,
+			QualityReply  = 5,
+			KeepAlive     = 6,
+			InputAck      = 7,
+		};
+		
+		// TODO address bitfields
+		[Serializable]
+		public struct ConnectStatus {
+			public bool IsDisconnected;//:1;
+			public int LastFrame;//:31;
+		};
+	};
+}

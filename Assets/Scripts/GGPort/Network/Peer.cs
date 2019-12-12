@@ -13,7 +13,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Serialization.Formatters.Binary;
 
 namespace GGPort {
-	public class UDPProtocol : IPollSink {
+	public class Peer : IPollSink {
 		private const int kUDPHeaderSize = 28; // Size of IP + UDP headers
 		private const uint kNumSyncPackets = 5;
 		private const uint kSyncRetryInterval = 2000;
@@ -26,64 +26,71 @@ namespace GGPort {
 		private const int kMaxSeqDistance = 1 << 15;
 		
 		// Network transmission information
-		protected UDP udp;
-		protected IPEndPoint peerAddress;
-		protected ushort magicNumber;
-		protected int queue;
-		protected ushort remoteMagicNumber;
-		protected bool connected;
-		protected int sendLatency;
-		protected int oopPercent;
-		protected OOPacket ooPacket;
-		protected CircularQueue<QueueEntry> sendQueue = new CircularQueue<QueueEntry>(64);
+		private Transport transport;
+		private IPEndPoint peerAddress;
+		private ushort magicNumber;
+		private int queueID;
+		private ushort remoteMagicNumber;
+		private bool connected;
+		private static readonly int kSendLatency = Platform.GetConfigInt("ggpo.network.delay");
+		private OutOfOrderPacket outOfOrderPacket;
+		private readonly CircularQueue<StampedPeerMessage> sendQueue;
+		private PeerMessage.ConnectStatus[] remoteStatuses;
 		
 		// Stats
-		protected int roundTripTime;
-		protected int packetsSent;
-		protected int bytesSent;
-		protected int kbpsSent;
-		protected long statsStartTime;
+		private int roundTripTime;
+		private int packetsSent;
+		private int bytesSent;
+		private int kbpsSent;
+		private long statsStartTime;
 
-		// The state machine // TODO plural naming?
-		protected UDPMessage.ConnectStatus[] localConnectStatus;
-		protected UDPMessage.ConnectStatus[] peerConnectStatus = new UDPMessage.ConnectStatus[UDPMessage.UDP_MSG_MAX_PLAYERS];
-		protected State currentState;
-		protected StateUnion state;
+		// The state machine
+		private readonly PeerMessage.ConnectStatus[] peerConnectStatuses;
+		private PeerMessage.ConnectStatus[] localConnectStatuses;
+		private State currentState;
+		private StateUnion state;
 
 		// Fairness
-		protected int localFrameAdvantage;
-		protected int remoteFrameAdvantage;
+		private int localFrameAdvantage;
+		private int remoteFrameAdvantage;
 
 		// Packet loss
-		protected CircularQueue<GameInput> pendingOutgoingInputs = new CircularQueue<GameInput>(64);
-		protected GameInput lastReceivedInput;
-		protected GameInput lastSentInput;
-		protected GameInput lastAckedInput;
-		protected long lastSendTime;
-		protected long lastReceiveTime;
-		protected long shutdownTimeout;
-		protected bool disconnectEventSent;
-		protected uint disconnectTimeout;
-		protected uint disconnectNotifyStart;
-		protected bool disconnectNotifySent;
+		private readonly CircularQueue<GameInput> pendingOutgoingInputs;
+		private GameInput lastReceivedInput;
+		private GameInput lastSentInput;
+		private GameInput lastAckedInput;
+		private long lastSendTime;
+		private long lastReceiveTime;
+		private long shutdownTimeout;
+		private bool disconnectEventSent;
+		private uint disconnectTimeout;
+		private uint disconnectNotifyStart;
+		private bool disconnectNotifySent;
 
-		protected ushort nextSendSequenceNumber;
-		protected ushort nextReceiveSequenceNumber;
+		private ushort nextSendSequenceNumber;
+		private ushort nextReceiveSequenceNumber;
 
 		// Rift synchronization
-		protected TimeSync timeSync = new TimeSync();
+		private readonly TimeSync timeSync;
 
 		// Event queue
-		protected CircularQueue<Event> eventQueue = new CircularQueue<Event>(64);
+		private readonly CircularQueue<Event> eventQueue;
 		
 		// Message dispatch
-		private delegate bool DispatchFn(ref UDPMessage msg, int len);
-		private readonly Dictionary<UDPMessage.MsgType, DispatchFn> table;
+		private delegate bool MessageHandler(PeerMessage incomingMsg);
+		private readonly Dictionary<PeerMessage.MsgType, MessageHandler> messageHandlersByType;
 
-		public UDPProtocol() {
+		public Peer() {
+			sendQueue = new CircularQueue<StampedPeerMessage>(64);
+			pendingOutgoingInputs = new CircularQueue<GameInput>(64);
+			peerConnectStatuses = new PeerMessage.ConnectStatus[PeerMessage.kMaxPlayers];
+			timeSync = new TimeSync();
+			eventQueue = new CircularQueue<Event>(64);
+			remoteStatuses = new PeerMessage.ConnectStatus[PeerMessage.kMaxPlayers];
+			
 			localFrameAdvantage = 0;
 			remoteFrameAdvantage = 0;
-			queue = -1;
+			queueID = -1;
 			magicNumber = 0;
 			remoteMagicNumber = 0;
 			packetsSent = 0;
@@ -98,7 +105,7 @@ namespace GGPort {
 			connected = false;
 			nextSendSequenceNumber = 0;
 			nextReceiveSequenceNumber = 0;
-			udp = null;
+			transport = null;
 			
 			lastSentInput.Init(-1, null, 1);
 			lastReceivedInput.Init(-1, null, 1);
@@ -106,38 +113,36 @@ namespace GGPort {
 
 			state = default;
 			
-			for (int i = 0; i < peerConnectStatus.Length; i++) {
-				peerConnectStatus[i] = default;
-				peerConnectStatus[i].LastFrame = -1;
+			for (int i = 0; i < peerConnectStatuses.Length; i++) {
+				peerConnectStatuses[i] = default;
+				peerConnectStatuses[i].LastFrame = -1;
 			}
 
 			peerAddress = default;
-			ooPacket.msg = null;
+			outOfOrderPacket.Init(queueID);
+			outOfOrderPacket.Clear();
 
-			sendLatency = Platform.GetConfigInt("ggpo.network.delay");
-			oopPercent = Platform.GetConfigInt("ggpo.oop.percent");
-			
-			table = new Dictionary<UDPMessage.MsgType, DispatchFn> {
-				[UDPMessage.MsgType.Invalid] = OnInvalid,
-				[UDPMessage.MsgType.SyncRequest] = OnSyncRequest,
-				[UDPMessage.MsgType.SyncReply] = OnSyncReply,
-				[UDPMessage.MsgType.Input] = OnInput,
-				[UDPMessage.MsgType.QualityReport] = OnQualityReport,
-				[UDPMessage.MsgType.QualityReply] = OnQualityReply,
-				[UDPMessage.MsgType.KeepAlive] = OnKeepAlive,
-				[UDPMessage.MsgType.InputAck] = OnInputAck
+			messageHandlersByType = new Dictionary<PeerMessage.MsgType, MessageHandler> {
+				[PeerMessage.MsgType.Invalid] = OnInvalid,
+				[PeerMessage.MsgType.SyncRequest] = OnSyncRequest,
+				[PeerMessage.MsgType.SyncReply] = OnSyncReply,
+				[PeerMessage.MsgType.Input] = OnInput,
+				[PeerMessage.MsgType.QualityReport] = OnQualityReport,
+				[PeerMessage.MsgType.QualityReply] = OnQualityReply,
+				[PeerMessage.MsgType.KeepAlive] = OnKeepAlive,
+				[PeerMessage.MsgType.InputAck] = OnInputAck
 			};
 		}
 
-		~UDPProtocol() {
+		~Peer() {
 			ClearSendQueue();
 		}
 
 		// TODO last param is list?
-		public void Init(ref UDP udp, ref Poll poll, int queue, IPEndPoint endPoint, UDPMessage.ConnectStatus[] status) {
-			this.udp = udp;
-			this.queue = queue;
-			localConnectStatus = status;
+		public void Init(ref Transport transport, ref Poll poll, int queueID, IPEndPoint endPoint, PeerMessage.ConnectStatus[] statuses) {
+			this.transport = transport;
+			this.queueID = queueID;
+			localConnectStatuses = statuses;
 
 			peerAddress = endPoint;
 
@@ -149,28 +154,28 @@ namespace GGPort {
 		}
 
 		public void Synchronize() {
-			if (udp != null) {
-				currentState = State.Syncing;
-				state.sync.roundtrips_remaining = kNumSyncPackets;
-				SendSyncRequest();
-			}
+			if (transport == null) { return; }
+
+			currentState = State.Syncing;
+			state.sync.RoundTripsRemaining = kNumSyncPackets;
+			SendSyncRequest();
 		}
 
 		public bool GetPeerConnectStatus(int id, out int frame) {
-			frame = peerConnectStatus[id].LastFrame;
-			return !peerConnectStatus[id].IsDisconnected;
+			frame = peerConnectStatuses[id].LastFrame;
+			return !peerConnectStatuses[id].IsDisconnected;
 		}
 		
-		public bool IsInitialized() { return udp != null; }
+		public bool IsInitialized() { return transport != null; }
 		public bool IsSynchronized() { return currentState == State.Running; }
 		public bool IsRunning() { return currentState == State.Running; }
 
-		public void SendInput(ref GameInput input) {
-			if (udp == null) { return; }
+		public void SendInput(GameInput input) {
+			if (transport == null) { return; }
 
 			if (currentState == State.Running) {
 				// Check to see if this is a good time to adjust for the rift...
-				timeSync.advance_frame(ref input, localFrameAdvantage, remoteFrameAdvantage);
+				timeSync.AdvanceFrame(input, localFrameAdvantage, remoteFrameAdvantage);
 
 				/*
 				* Save this input packet
@@ -187,26 +192,26 @@ namespace GGPort {
 		}
 
 		public void SendInputAck() {
-			UDPMessage msg = new UDPMessage(UDPMessage.MsgType.InputAck);
-			msg.inputAck.ackFrame = lastReceivedInput.Frame;
-			SendMsg(ref msg);
+			PeerMessage msg = new PeerMessage(PeerMessage.MsgType.InputAck) {
+				inputAck = {
+					ackFrame = lastReceivedInput.Frame
+				}
+			};
+			
+			SendMsg(msg);
 		}
 
-		public bool HandlesMsg(ref IPEndPoint from, ref UDPMessage msg) {
-			if (udp == null) { return false; }
-
-			return peerAddress.Equals(from);
+		public bool HandlesMsg(IPEndPoint from) {
+			return transport != null && peerAddress.Equals(from);
 		}
 		
-		public void OnMsg(ref UDPMessage msg, int len) {
-			bool handled = false;
-
+		public void OnMsg(PeerMessage msg) {
 			// filter out messages that don't match what we expect
 			ushort seq = msg.header.SequenceNumber;
-			if (msg.header.type != UDPMessage.MsgType.SyncRequest &&
-			    msg.header.type != UDPMessage.MsgType.SyncReply) {
-				if (msg.header.magic != remoteMagicNumber) {
-					LogMsg("recv rejecting", ref msg);
+			if (msg.header.type != PeerMessage.MsgType.SyncRequest &&
+			    msg.header.type != PeerMessage.MsgType.SyncReply) {
+				if (msg.header.MagicNumber != remoteMagicNumber) {
+					LogMsg("recv rejecting", msg);
 					return;
 				}
 
@@ -220,17 +225,16 @@ namespace GGPort {
 			}
 
 			nextReceiveSequenceNumber = seq;
-			LogMsg("recv", ref msg);
-			if ((byte) msg.header.type >= table.Count) {
-				OnInvalid(ref msg, len);
-			} else {
-				handled = table[msg.header.type](ref msg, len);
-			}
-			if (handled) {
+			LogMsg("recv", msg);
+			if ((byte) msg.header.type >= messageHandlersByType.Count) {
+				OnInvalid(msg);
+			} else if (messageHandlersByType[msg.header.type](msg)) {
 				lastReceiveTime = Platform.GetCurrentTimeMS();
-				if (disconnectNotifySent && currentState == State.Running) {
+
+				bool canResumeIfNeeded = disconnectNotifySent && currentState == State.Running;
+				if (canResumeIfNeeded) {
 					Event evt = new Event(Event.Type.NetworkResumed);
-					QueueEvent(ref evt); // TODO ref is unnecessary?
+					QueueEvent(evt);
 					disconnectNotifySent = false;
 				}
 			}
@@ -313,54 +317,55 @@ namespace GGPort {
 			);
 		}
 
-		protected void QueueEvent(ref Event evt) {
+		private void QueueEvent(Event evt) {
 			LogEvent("Queuing event", evt);
 			eventQueue.Push(evt);
 		}
 
-		protected void ClearSendQueue() {
+		private void ClearSendQueue() {
 			while (sendQueue.Count > 0) {
-				sendQueue.Peek().msg = default;
+				sendQueue.Peek().Msg = default;
 				sendQueue.Pop();
 			}
 		}
 
 		// TODO revalidate these log wrappers as they may add some info to the string passed to global log
-		protected void Log(string msg) {
-			string prefix = $"udpproto{queue} ";
+		private void Log(string msg) => Log(queueID, msg);
+		private static void Log(int queueID, string msg) {
+			string prefix = $"udpproto{queueID} ";
 			LogUtil.Log(prefix + msg);
 		}
 
-		protected void LogMsg(string prefix, ref UDPMessage msg) {
+		private void LogMsg(string prefix, PeerMessage msg) {
 			switch (msg.header.type) {
-				case UDPMessage.MsgType.SyncRequest:
+				case PeerMessage.MsgType.SyncRequest:
 					Log($"{prefix} sync-request ({msg.syncRequest.randomRequest}).{Environment.NewLine}");
 					break;
-				case UDPMessage.MsgType.SyncReply:
+				case PeerMessage.MsgType.SyncReply:
 					Log($"{prefix} sync-reply ({msg.syncReply.randomReply}).{Environment.NewLine}");
 					break;
-				case UDPMessage.MsgType.QualityReport:
+				case PeerMessage.MsgType.QualityReport:
 					Log($"{prefix} quality report.{Environment.NewLine}");
 					break;
-				case UDPMessage.MsgType.QualityReply:
+				case PeerMessage.MsgType.QualityReply:
 					Log($"{prefix} quality reply.{Environment.NewLine}");
 					break;
-				case UDPMessage.MsgType.KeepAlive:
+				case PeerMessage.MsgType.KeepAlive:
 					Log($"{prefix} keep alive.{Environment.NewLine}");
 					break;
-				case UDPMessage.MsgType.Input:
+				case PeerMessage.MsgType.Input:
 					Log($"{prefix} game-compressed-input {msg.input.startFrame} (+ {msg.input.numBits} bits).{Environment.NewLine}");
 					break;
-				case UDPMessage.MsgType.InputAck:
+				case PeerMessage.MsgType.InputAck:
 					Log($"{prefix} input ack.{Environment.NewLine}");
 					break;
 				default:
-					Platform.AssertFailed($"Unknown {nameof(UDPMessage)} type.");
+					Platform.AssertFailed($"Unknown {nameof(PeerMessage)} type.");
 					break;
 			}
 		}
 
-		protected void LogEvent(string prefix, Event evt) {
+		private void LogEvent(string prefix, Event evt) {
 			switch (evt.type) {
 				case Event.Type.Synchronized:
 					Log($"{prefix} (event: {nameof(Event.Type.Synchronized)}).{Environment.NewLine}");
@@ -368,101 +373,102 @@ namespace GGPort {
 			}
 		}
 
-		protected void SendSyncRequest() {
-			if (state.sync.random == 0) {
-				state.sync.random = (uint) (new Random().Next(0, ushort.MaxValue) & 0xFFFF);
-			}
+		private void SendSyncRequest() {
+			state.sync.Random = (uint) (new Random().Next(1, ushort.MaxValue) & 0xFFFF); // TODO create outer random var
 
-			UDPMessage msg = new UDPMessage(UDPMessage.MsgType.SyncRequest) {
+			PeerMessage msg = new PeerMessage(PeerMessage.MsgType.SyncRequest) {
 				syncRequest = {
-					randomRequest = state.sync.random
+					randomRequest = state.sync.Random
 				}
 			};
 			
-			SendMsg(ref msg);
+			SendMsg(msg);
 		}
 
-		protected void SendMsg(ref UDPMessage msg) {
-			LogMsg("send", ref msg);
+		private void SendMsg(PeerMessage msg) {
+			LogMsg("send", msg);
 
 			packetsSent++;
 			lastSendTime = Platform.GetCurrentTimeMS();
 
-			msg.header.magic = magicNumber;
+			msg.header.MagicNumber = magicNumber;
 			msg.header.SequenceNumber = nextSendSequenceNumber++;
 
-			sendQueue.Push(new QueueEntry(Platform.GetCurrentTimeMS(), ref peerAddress, ref msg));
+			sendQueue.Push(new StampedPeerMessage(peerAddress, msg));
 			PumpSendQueue();
 		}
 
-		protected void PumpSendQueue() {
+		private void PumpSendQueue() {
 			Random random = new Random(); // TODO pry move to more global scope...maybe?
+			BinaryFormatter formatter = new BinaryFormatter(); // TODO same here
 			while (sendQueue.Count > 0 ) {
-				QueueEntry entry = sendQueue.Peek();
+				StampedPeerMessage entry = sendQueue.Peek();
 
-				if (sendLatency != 0) {
-					// should really come up with a gaussian distributation based on the configured
+				if (kSendLatency != 0) {
+					// should really come up with a gaussian distribution based on the configured
 					// value, but this will do for now.
 					
-					int jitter = sendLatency * 2 / 3 + random.Next(0, ushort.MaxValue) % sendLatency / 3; // TODO cleanup rand
-					if (Platform.GetCurrentTimeMS() < sendQueue.Peek().queue_time + jitter) {
+					int jitter = kSendLatency * 2 / 3 + random.Next(0, ushort.MaxValue) % kSendLatency / 3; // TODO cleanup rand
+					if (Platform.GetCurrentTimeMS() < sendQueue.Peek().CreationTime + jitter) {
 						break;
 					}
 				}
-				
-				if (oopPercent != 0 && ooPacket.msg == null && random.Next(0, ushort.MaxValue) % 100 < oopPercent) { // TODO cleanup rand
-					int delay = random.Next(0, ushort.MaxValue) % (sendLatency * 10 + 1000); // TODO cleanup rand
-					Log($"creating rogue oop (seq: {entry.msg.header.SequenceNumber}  delay: {delay}){Environment.NewLine}");
-					ooPacket.send_time = Platform.GetCurrentTimeMS() + delay;
-					ooPacket.msg = entry.msg;
-					ooPacket.dest_addr = entry.dest_addr;
-				} else {
-					Platform.Assert(!entry.dest_addr.Address.Equals(IPAddress.None));
-					
-					BinaryFormatter formatter = new BinaryFormatter(); // LOH relates to here as well
+
+				bool shouldCreatePacket = !outOfOrderPacket.RandomSet(entry);
+				if (shouldCreatePacket) {
+					Platform.Assert(!entry.DestinationAddress.Address.Equals(IPAddress.None));
+
 					using (MemoryStream ms = new MemoryStream()) {
-						formatter.Serialize(ms, entry.msg);
-						bytesSent += udp.SendTo(ms.ToArray(), (int) ms.Length, 0, entry.dest_addr);
+						formatter.Serialize(ms, entry.Msg);
+						bytesSent += transport.SendTo(ms.ToArray(), (int) ms.Length, 0, entry.DestinationAddress);
 					} // TODO optimize/refactor
 
-					entry.msg = default;
+					entry.Msg = default;
 				}
-				
+
 				sendQueue.Pop();
 			}
-			if (ooPacket.msg != null && ooPacket.send_time < Platform.GetCurrentTimeMS()) {
-				Log("sending rogue oop!");
-					
-				BinaryFormatter formatter = new BinaryFormatter();
-				using (MemoryStream ms = new MemoryStream()) {
-					formatter.Serialize(ms, (UDPMessage) ooPacket.msg); // TODO does this needs to cast from <UdpMsg?> to <UdpMsg> ???
-					bytesSent += udp.SendTo(ms.ToArray(), (int) ms.Length, 0, ooPacket.dest_addr);
-				} // TODO optimize/refactor
+			
+			if (!outOfOrderPacket.ShouldSendNow()) { return; }
+			
+			Log($"Sending rogue {nameof(OutOfOrderPacket)}!");
 
-				ooPacket.msg = null; // TODO does this need to be nullable?
-			}
+			using (MemoryStream ms = new MemoryStream()) {
+				formatter.Serialize(
+					ms,
+					(PeerMessage) outOfOrderPacket.Message
+				); // TODO does this needs to cast from <UdpMsg?> to <UdpMsg> ???
+				bytesSent += transport.SendTo(ms.ToArray(), (int) ms.Length, 0, outOfOrderPacket.DestinationAddress);
+			} // TODO optimize/refactor
+
+			outOfOrderPacket.Clear();
 		}
 
-		// LOH problem with sending a UDPMessage >4096 bytes originates here
-		// could possibly have to do with either input serialization and/or msg.input structure
-		protected unsafe void SendPendingOutput() {
-			UDPMessage msg = new UDPMessage(UDPMessage.MsgType.Input);
+		private unsafe void SendPendingOutput() {
+			//LogUtil.Log($"SENDING {pendingOutgoingInputs.Count} PENDING INPUT(S) ----------------------------------------------------------{Environment.NewLine}"); // TODO remove when no longer needed
 			int offset = 0;
+			PeerMessage msg = new PeerMessage(PeerMessage.MsgType.Input);
 
 			if (pendingOutgoingInputs.Count != 0) {
+				GameInput lastInput = lastAckedInput;
 				GameInput outputQueueFront = pendingOutgoingInputs.Peek();
-				msg.input.startFrame = (uint) outputQueueFront.Frame;
+				msg.input.startFrame = outputQueueFront.Frame;
 				msg.input.inputSize = (byte) outputQueueFront.Size;
 
-				Platform.Assert(lastAckedInput.Frame == -1 || lastAckedInput.Frame + 1 == msg.input.startFrame);
+				Platform.Assert(
+					lastInput.IsNull() || lastInput.Frame + 1 == msg.input.startFrame, 
+					$"lastInput.IsNull() || lastInput.Frame + 1 == msg.input.startFrame{Environment.NewLine}"
+					+ $"{lastInput.IsNull()} || {lastInput.Frame} + 1 == {msg.input.startFrame}"
+				);
 				
+				// set msg.input.bits (i.e. compressed outgoing input queue data)
 				foreach (GameInput pendingInput in pendingOutgoingInputs) {
 					bool currentEqualsLastBits = true;
 					for (int j = 0; j < pendingInput.Size; j++) {
-						if (pendingInput.Bits[j] != lastAckedInput.Bits[j]) {
-							currentEqualsLastBits = false;
-							break;
-						}
+						if (pendingInput.Bits[j] == lastInput.Bits[j]) { continue; }
+
+						currentEqualsLastBits = false;
+						break;
 					}
 					
 					if (!currentEqualsLastBits) {
@@ -471,18 +477,18 @@ namespace GGPort {
 						for (int bitIndex = 0; bitIndex < pendingInput.Size * 8; bitIndex++) {
 							Platform.Assert(bitIndex < 1 << BitVector.kBitVectorNibbleSize);
 							bool pendingInputBit = pendingInput[bitIndex];
-							bool lastAckedInputBit = lastAckedInput[bitIndex];
-							
-							if (pendingInputBit != lastAckedInputBit) {
-								BitVector.WriteBit(msg.input.bits, ref offset, true);
-								BitVector.WriteBit(msg.input.bits, ref offset, pendingInputBit);
-								BitVector.WriteNibblet(msg.input.bits, bitIndex, ref offset);
-							}
+							bool lastAckedInputBit = lastInput[bitIndex];
+
+							if (pendingInputBit == lastAckedInputBit) { continue; }
+
+							BitVector.WriteBit(msg.input.bits, ref offset, true);
+							BitVector.WriteBit(msg.input.bits, ref offset, pendingInputBit);
+							BitVector.WriteNibblet(msg.input.bits, bitIndex, ref offset);
 						}
 					}
 
 					BitVector.WriteBit(msg.input.bits, ref offset, false);
-					lastAckedInput = lastSentInput = pendingInput;
+					lastInput = lastSentInput = pendingInput;
 				}
 			} else {
 				msg.input.startFrame = 0;
@@ -493,87 +499,97 @@ namespace GGPort {
 			msg.input.numBits = (ushort) offset;
 
 			msg.input.disconnectRequested = currentState == State.Disconnected;
-			if (localConnectStatus != null) {
-				for (int k = 0; k < msg.input.peerConnectStatus.Length; k++) {
-					msg.input.peerConnectStatus[k] = localConnectStatus[k];
-				}
-			} else {
-				for (int k = 0; k < msg.input.peerConnectStatus.Length; k++) {
-					msg.input.peerConnectStatus[k] = default;
-				}
+			
+			for (int peerIndex = 0; peerIndex < PeerMessage.kMaxPlayers; peerIndex++) {
+				msg.input.SetPeerConnectStatus(peerIndex, localConnectStatuses?[peerIndex] ?? default);
 			}
 
-			Platform.Assert(offset < UDPMessage.MAX_COMPRESSED_BITS);
+			Platform.Assert(offset < PeerMessage.kMaxCompressedBits);
 
-			SendMsg(ref msg);
+			SendMsg(msg);
 		}
 
-		protected bool OnInvalid(ref UDPMessage msg, int len) {
-			Platform.AssertFailed($"Invalid {nameof(msg)} in {nameof(UDPProtocol)}.");
+		private bool OnInvalid(PeerMessage msg) {
+			Platform.AssertFailed($"Invalid {nameof(msg)} in {nameof(Peer)}.");
 			return false;
 		}
 
-		protected bool OnSyncRequest(ref UDPMessage msg, int len) {
-			if (remoteMagicNumber != 0 && msg.header.magic != remoteMagicNumber) {
-				Log($"Ignoring sync request from unknown endpoint ({msg.header.magic} != {remoteMagicNumber}).{Environment.NewLine}");
+		private bool OnSyncRequest(PeerMessage msg) {
+			if (remoteMagicNumber != 0 && msg.header.MagicNumber != remoteMagicNumber) {
+				Log($"Ignoring sync request from unknown endpoint ({msg.header.MagicNumber} != {remoteMagicNumber}).{Environment.NewLine}");
 				
 				return false;
 			}
 
-			UDPMessage reply = new UDPMessage(UDPMessage.MsgType.SyncReply) {
+			PeerMessage reply = new PeerMessage(PeerMessage.MsgType.SyncReply) {
 				syncReply = {
 					randomReply = msg.syncRequest.randomRequest
 				}
 			};
+
+			if (!state.sync.HasStartedSyncing || state.sync.StartedInorganically) {
+				if (!state.sync.HasStartedSyncing) { state.sync.RoundTripsRemaining = kNumSyncPackets; }
+				state.sync.StartedInorganically = true;
+
+				PeerMessage syncReplyMessage = new PeerMessage(PeerMessage.MsgType.SyncReply) {
+					syncReply = {
+						randomReply = state.sync.Random
+					}
+				};
+
+				OnSyncReply(syncReplyMessage);
+			}
 			
-			SendMsg(ref reply);
+			SendMsg(reply);
 			
 			return true;
 		}
 
-		protected bool OnSyncReply(ref UDPMessage msg, int len) {
+		private bool OnSyncReply(PeerMessage msg) {
 			if (currentState != State.Syncing) {
 				Log($"Ignoring SyncReply while not syncing.{Environment.NewLine}");
 				
-				return msg.header.magic == remoteMagicNumber;
+				return msg.header.MagicNumber == remoteMagicNumber;
 			}
 
-			if (msg.syncReply.randomReply != state.sync.random) {
-				Log($"sync reply {msg.syncReply.randomReply} != {state.sync.random}.  Keep looking...{Environment.NewLine}");
+			if (msg.syncReply.randomReply != state.sync.Random) {
+				Log($"sync reply {msg.syncReply.randomReply} != {state.sync.Random}.  Keep looking...{Environment.NewLine}");
 				
 				return false;
 			}
 
 			if (!connected) {
 				Event evt = new Event(Event.Type.Connected);
-				QueueEvent(ref evt); // TODO ref is unnecessary?
+				QueueEvent(evt);
 				connected = true;
 			}
 
-			Log($"Checking sync state ({state.sync.roundtrips_remaining} round trips remaining).{Environment.NewLine}");
-			if (--state.sync.roundtrips_remaining == 0) {
+			Log($"Checking sync state ({state.sync.RoundTripsRemaining} round trips remaining).{Environment.NewLine}");
+			if (--state.sync.RoundTripsRemaining == 0) {
 				Log($"Synchronized!{Environment.NewLine}");
 
 				Event evt = new Event(Event.Type.Synchronized);
-				QueueEvent(ref evt); // TODO ref is unnecessary?
+				QueueEvent(evt);
 				currentState = State.Running;
 				lastReceivedInput.Frame = -1;
-				remoteMagicNumber = msg.header.magic;
+				remoteMagicNumber = msg.header.MagicNumber;
 			} else {
+				state.sync.HasStartedSyncing = true;
+				
 				Event evt = new Event(Event.Type.Synchronizing) {
 					synchronizing = {
-						total = (int) kNumSyncPackets,
-						count = (int) (kNumSyncPackets - state.sync.roundtrips_remaining)
+						Total = (int) kNumSyncPackets,
+						Count = (int) (kNumSyncPackets - state.sync.RoundTripsRemaining)
 					}
 				};
 				
-				QueueEvent(ref evt);
-				SendSyncRequest();
+				QueueEvent(evt);
+				if (!state.sync.StartedInorganically) { SendSyncRequest(); }
 			}
 			return true;
 		}
 
-		protected bool OnInput(ref UDPMessage incomingMsg, int len) {
+		private unsafe bool OnInput(PeerMessage incomingMsg) {
 			// If a disconnect is requested, go ahead and disconnect now.
 			bool disconnectRequested = incomingMsg.input.disconnectRequested;
 			if (disconnectRequested) {
@@ -581,19 +597,19 @@ namespace GGPort {
 					Log($"Disconnecting endpoint on remote request.{Environment.NewLine}");
 
 					Event evt = new Event(Event.Type.Disconnected);
-					QueueEvent(ref evt); // TODO ref is unnecessary?
+					QueueEvent(evt);
 					disconnectEventSent = true;
 				}
 			} else {
 				// Update the peer connection status if this peer is still considered to be part of the network.
-				UDPMessage.ConnectStatus[] remoteStatus = incomingMsg.input.peerConnectStatus;
-				for (int i = 0; i < peerConnectStatus.Length; i++) {
-					Platform.Assert(remoteStatus[i].LastFrame >= peerConnectStatus[i].LastFrame);
+				incomingMsg.input.GetConnectStatuses(ref remoteStatuses);
+				for (int i = 0; i < peerConnectStatuses.Length; i++) {
+					Platform.Assert(remoteStatuses[i].LastFrame >= peerConnectStatuses[i].LastFrame);
 					
-					peerConnectStatus[i].IsDisconnected = peerConnectStatus[i].IsDisconnected || remoteStatus[i].IsDisconnected;
-					peerConnectStatus[i].LastFrame = Math.Max(
-						peerConnectStatus[i].LastFrame,
-						remoteStatus[i].LastFrame
+					peerConnectStatuses[i].IsDisconnected = peerConnectStatuses[i].IsDisconnected || remoteStatuses[i].IsDisconnected;
+					peerConnectStatuses[i].LastFrame = Math.Max(
+						peerConnectStatuses[i].LastFrame,
+						remoteStatuses[i].LastFrame
 					);
 				}
 			}
@@ -602,13 +618,12 @@ namespace GGPort {
 			int lastReceivedFrameNumber = lastReceivedInput.Frame;
 			if (incomingMsg.input.numBits != 0) {
 				int offset = 0;
-				byte[] incomingBits = incomingMsg.input.bits;
 				int numBits = incomingMsg.input.numBits;
-				int currentFrame = (int) incomingMsg.input.startFrame; // TODO ecgh
+				int currentFrame = incomingMsg.input.startFrame;
 
 				lastReceivedInput.Size = incomingMsg.input.inputSize;
 				if (lastReceivedInput.Frame < 0) {
-					lastReceivedInput.Frame = (int) (incomingMsg.input.startFrame - 1); // TODO ecgh
+					lastReceivedInput.Frame = incomingMsg.input.startFrame - 1;
 				}
 
 				while (offset < numBits) {
@@ -620,12 +635,12 @@ namespace GGPort {
 					
 					bool useInputs = currentFrame == lastReceivedInput.Frame + 1;
 
-					while (BitVector.ReadBit(incomingBits, ref offset) != 0) {
-						if (useInputs) {
-							int buttonBitIndex = BitVector.ReadNibblet(incomingBits, ref offset);
-							bool isOn = BitVector.ReadBit(incomingBits, ref offset) != 0;
-							lastReceivedInput[buttonBitIndex] = isOn;
-						}
+					byte* incomingBits = incomingMsg.input.bits;
+					while (BitVector.ReadBit(incomingBits, ref offset)) {
+						bool isOn = BitVector.ReadBit(incomingBits, ref offset);
+						int buttonBitIndex = BitVector.ReadNibblet(incomingBits, ref offset);
+
+						if (useInputs) { lastReceivedInput[buttonBitIndex] = isOn; }
 					}
 
 					Platform.Assert(offset <= numBits);
@@ -639,16 +654,14 @@ namespace GGPort {
 
 						// Send the event to the emulator
 						Event evt = new Event(Event.Type.Input) {
-							input = {
-								input = lastReceivedInput
-							}
+							input = lastReceivedInput
 						};
 
 						string desc = lastReceivedInput.Desc();
-						state.running.last_input_packet_recv_time = Platform.GetCurrentTimeMS();
+						state.running.LastInputPacketReceiveTime = Platform.GetCurrentTimeMS();
 
-						Log($"Sending frame {lastReceivedInput.Frame} to emu queue {queue} ({desc}).{Environment.NewLine}");
-						QueueEvent(ref evt);
+						Log($"Sending frame {lastReceivedInput.Frame} to emu queue {queueID} ({desc}).{Environment.NewLine}");
+						QueueEvent(evt);
 					} else {
 						Log($"Skipping past frame:({currentFrame}) current is {lastReceivedInput.Frame}.{Environment.NewLine}");
 					}
@@ -669,7 +682,7 @@ namespace GGPort {
 			return true;
 		}
 
-		protected bool OnInputAck(ref UDPMessage msg, int len) {
+		private bool OnInputAck(PeerMessage msg) {
 			// Get rid of our buffered input
 			while (pendingOutgoingInputs.Count != 0 && pendingOutgoingInputs.Peek().Frame < msg.inputAck.ackFrame) {
 				Log($"Throwing away pending output frame {pendingOutgoingInputs.Peek().Frame}{Environment.NewLine}");
@@ -679,28 +692,28 @@ namespace GGPort {
 			return true;
 		}
 
-		protected bool OnQualityReport(ref UDPMessage msg, int len) {
+		private bool OnQualityReport(PeerMessage msg) {
 			// send a reply so the other side can compute the round trip transmit time.
-			UDPMessage reply = new UDPMessage(UDPMessage.MsgType.QualityReply) {
+			PeerMessage reply = new PeerMessage(PeerMessage.MsgType.QualityReply) {
 				qualityReply = {
 					pong = msg.qualityReport.ping
 				}
 			};
 			
-			SendMsg(ref reply);
+			SendMsg(reply);
 
 			remoteFrameAdvantage = msg.qualityReport.frameAdvantage;
 			
 			return true;
 		}
 
-		protected bool OnQualityReply(ref UDPMessage msg, int len) {
+		private bool OnQualityReply(PeerMessage msg) {
 			roundTripTime = (int) (Platform.GetCurrentTimeMS() - msg.qualityReply.pong);
 			
 			return true;
 		}
 
-		protected bool OnKeepAlive(ref UDPMessage msg, int len) {
+		private bool OnKeepAlive(PeerMessage msg) {
 			return true;
 		}
 		
@@ -708,7 +721,7 @@ namespace GGPort {
 		public virtual bool OnMsgPoll(object TODO) { return true; }
 		public virtual bool OnPeriodicPoll(object TODO0, long TODO1) { return true; }
 		public virtual bool OnLoopPoll(object cookie) {
-			if (udp == null) {
+			if (transport == null) {
 			   return true;
 			}
 
@@ -717,7 +730,7 @@ namespace GGPort {
 			PumpSendQueue();
 			switch (currentState) {
 				case State.Syncing:
-					uint nextInterval = (state.sync.roundtrips_remaining == kNumSyncPackets) ? kSyncFirstRetryInterval : kSyncRetryInterval;
+					uint nextInterval = (state.sync.RoundTripsRemaining == kNumSyncPackets) ? kSyncFirstRetryInterval : kSyncRetryInterval;
 					if (lastSendTime != 0 && lastSendTime + nextInterval < now) {
 					   Log($"No luck syncing after {nextInterval} ms... Re-queueing sync packet.{Environment.NewLine}");
 					   SendSyncRequest();
@@ -726,33 +739,33 @@ namespace GGPort {
 
 				case State.Running:
 					// xxx: rig all this up with a timer wrapper
-					if (state.running.last_input_packet_recv_time == 0 || state.running.last_input_packet_recv_time + kRunningRetryInterval < now) {
+					if (state.running.LastInputPacketReceiveTime == 0 || state.running.LastInputPacketReceiveTime + kRunningRetryInterval < now) {
 					   Log($"Haven't exchanged packets in a while (last received:{lastReceivedInput.Frame}  last sent:{lastSentInput.Frame}).  Resending.{Environment.NewLine}");
 					   SendPendingOutput();
-					   state.running.last_input_packet_recv_time = now;
+					   state.running.LastInputPacketReceiveTime = now;
 					}
 
-					if (state.running.last_quality_report_time == 0 || state.running.last_quality_report_time + kQualityReportInterval < now) {
-						UDPMessage msg = new UDPMessage(UDPMessage.MsgType.QualityReport) {
+					if (state.running.LastQualityReportTime == 0 || state.running.LastQualityReportTime + kQualityReportInterval < now) {
+						PeerMessage msg = new PeerMessage(PeerMessage.MsgType.QualityReport) {
 							qualityReport = {
 								ping = Platform.GetCurrentTimeMS(), frameAdvantage = (sbyte) localFrameAdvantage
 							}
 						};
 						
-						SendMsg(ref msg);
-					   state.running.last_quality_report_time = now;
+						SendMsg(msg);
+						state.running.LastQualityReportTime = now;
 					}
 
-					if (state.running.last_network_stats_interval == 0 || state.running.last_network_stats_interval + kNetworkStatsInterval < now) {
+					if (state.running.LastNetworkStatsInterval == 0 || state.running.LastNetworkStatsInterval + kNetworkStatsInterval < now) {
 					   UpdateNetworkStats();
-					   state.running.last_network_stats_interval = now;
+					   state.running.LastNetworkStatsInterval = now;
 					}
 
 					if (lastSendTime != 0 && lastSendTime + kKeepAliveInterval < now) {
 					   Log($"Sending keep alive packet{Environment.NewLine}");
 
-					   UDPMessage udpMsg = new UDPMessage(UDPMessage.MsgType.KeepAlive);
-					   SendMsg(ref udpMsg); // TODO ref is unnecessary?
+					   PeerMessage peerMsg = new PeerMessage(PeerMessage.MsgType.KeepAlive);
+					   SendMsg(peerMsg);
 					}
 
 					if (disconnectTimeout != 0 && disconnectNotifyStart != 0 && 
@@ -761,11 +774,11 @@ namespace GGPort {
 					   Log($"Endpoint has stopped receiving packets for {disconnectNotifyStart} ms.  Sending notification.{Environment.NewLine}");
 					   Event e = new Event(Event.Type.NetworkInterrupted) {
 						   network_interrupted = {
-							   disconnect_timeout = (int) (disconnectTimeout - disconnectNotifyStart)
+							   DisconnectTimeout = (int) (disconnectTimeout - disconnectNotifyStart)
 						   }
 					   };
 					   
-					   QueueEvent(ref e);
+					   QueueEvent(e);
 					   disconnectNotifySent = true;
 					}
 
@@ -774,7 +787,7 @@ namespace GGPort {
 					      Log($"Endpoint has stopped receiving packets for {disconnectTimeout} ms.  Disconnecting.{Environment.NewLine}");
 					      
 					      Event evt = new Event(Event.Type.Disconnected);
-					      QueueEvent(ref evt); // TODO ref is unnecessary?
+					      QueueEvent(evt);
 					      disconnectEventSent = true;
 					   }
 					}
@@ -783,7 +796,7 @@ namespace GGPort {
 				case State.Disconnected:
 				   if (shutdownTimeout < now) {
 				      Log($"Shutting down udp connection.{Environment.NewLine}");
-				      udp = null;
+				      transport = null;
 				      shutdownTimeout = 0;
 				   }
 				   
@@ -798,27 +811,23 @@ namespace GGPort {
 			public readonly int remote_frame_advantage;
 			public readonly int local_frame_advantage;
 			public readonly int send_queue_len;
-			public readonly UDP.Stats udp;
+			public readonly Transport.Stats udp;
 		}
 
 		[StructLayout(LayoutKind.Explicit)]
 		public struct Event {
 			[FieldOffset(0)] public readonly Type type;
-			[FieldOffset(4)] public Input input;
+			[FieldOffset(4)] public GameInput input;
 			[FieldOffset(4)] public Synchronizing synchronizing;
 			[FieldOffset(4)] public NetworkInterrupted network_interrupted;
 
-			public struct Input {
-				public GameInput input;
-			}
-
 			public struct Synchronizing {
-				public int total { get; set; }
-				public int count { get; set; }
+				public int Total { get; set; }
+				public int Count { get; set; }
 			}
 
 			public struct NetworkInterrupted {
-				public int disconnect_timeout { get; set; }
+				public int DisconnectTimeout { get; set; }
 			}
 
 			public Event(Type t = Type.Unknown) : this() {
@@ -837,28 +846,63 @@ namespace GGPort {
 			}
 		}
 
-		protected struct OOPacket {
-			public long send_time { get; set; }
-			public IPEndPoint dest_addr { get; set; }
-			public UDPMessage? msg { get; set; }
+		// TODO should go in debug define
+		private struct OutOfOrderPacket {
+			private static readonly Random kRandom = new Random();
+			private static readonly int kOutOfOrderPacketPercentage = Platform.GetConfigInt("ggpo.oop.percent");
+
+			public IPEndPoint DestinationAddress { get; private set; }
+			public PeerMessage? Message { get; private set; }
+
+			private int queueID;
+			private long sendTime;
+
+			public void Init(int queueID) {
+				this.queueID = queueID;
+			}
+
+			public bool RandomSet(StampedPeerMessage entry) {
+				bool shouldSet = kOutOfOrderPacketPercentage > 0
+				                 && Message == null
+				                 && kRandom.Next(0, ushort.MaxValue) % 100 < kOutOfOrderPacketPercentage;
+
+				if (shouldSet) {
+					int delay = kRandom.Next(0, ushort.MaxValue) % (kSendLatency * 10 + 1000);
+					sendTime = Platform.GetCurrentTimeMS() + delay;
+					Message = entry.Msg;
+					DestinationAddress = entry.DestinationAddress;
+					
+					Log(queueID, $"creating rogue oop (seq: {entry.Msg.header.SequenceNumber}  delay: {delay}){Environment.NewLine}");
+				}
+
+				return shouldSet;
+			}
+
+			public bool ShouldSendNow() {
+				return Message != null && sendTime < Platform.GetCurrentTimeMS();
+			}
+
+			public void Clear() {
+				Message = null;
+			}
 		}
-		
-		protected enum State {
+
+		private enum State {
 			Syncing,
 			Synchronized,
 			Running,
 			Disconnected
 		}
 
-		protected struct QueueEntry {
-			public readonly long queue_time;
-			public readonly IPEndPoint dest_addr;
-			public UDPMessage msg;
+		private struct StampedPeerMessage {
+			public readonly long CreationTime;
+			public readonly IPEndPoint DestinationAddress;
+			public PeerMessage Msg;
 
-			public QueueEntry(long time, ref IPEndPoint dst, ref UDPMessage m) : this() {
-				queue_time = time;
-				dest_addr = dst;
-				msg = m;
+			public StampedPeerMessage(IPEndPoint destinationAddress, PeerMessage msg) : this() {
+				CreationTime = Platform.GetCurrentTimeMS();
+				DestinationAddress = destinationAddress;
+				Msg = msg;
 			}
 		}
 
@@ -868,14 +912,16 @@ namespace GGPort {
 			[FieldOffset(0)] public Running running;
 
 			public struct Sync {
-				public uint roundtrips_remaining { get; set; }
-				public uint random { get; set; }
+				public uint RoundTripsRemaining { get; set; }
+				public uint Random { get; set; } // last acked random? TODO
+				public bool HasStartedSyncing;
+				public bool StartedInorganically;
 			}
 
 			public struct Running {
-				public long last_quality_report_time { get; set; }
-				public long last_network_stats_interval { get; set; }
-				public long last_input_packet_recv_time { get; set; }
+				public long LastQualityReportTime { get; set; }
+				public long LastNetworkStatsInterval { get; set; }
+				public long LastInputPacketReceiveTime { get; set; }
 			}
 		}
 	}

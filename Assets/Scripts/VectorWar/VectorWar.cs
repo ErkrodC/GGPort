@@ -12,7 +12,7 @@ using Event = GGPort.Event;
 namespace VectorWar {
 	// Interface to the vector war application.
 	public static class VectorWar {
-		private const int kFrameDelay = 2;
+		private const int kFrameDelay = 0;
 		private const int kMaxPlayers = 64;
 
 		private static GameState GameState = new GameState();
@@ -54,7 +54,7 @@ namespace VectorWar {
 #if SYNC_TEST
 			result = GGPOMain.ggpo_start_synctest(ref ggpo, ref cb, "vectorwar", num_players, sizeof(int), 1);
 #else
-			result = Session.StartSession(out session, ref sessionCallbacks, "vectorwar", numPlayers, sizeof(int), localPort);
+			result = Session.StartSession(out session, sessionCallbacks, "vectorwar", numPlayers, sizeof(int), localPort);
 #endif
 
 			// automatically disconnect clients after 3000 ms and start our count-down timer
@@ -65,7 +65,7 @@ namespace VectorWar {
 
 			int i;
 			for (i = 0; i < numPlayers + numSpectators; i++) {
-				result = session.AddPlayer(ref players[i], out PlayerHandle handle);
+				result = session.AddPlayer(players[i], out PlayerHandle handle);
 				NonGameState.players[i].handle = handle;
 				NonGameState.players[i].type = players[i].Type;
 				if (players[i].Type == GGPOPlayerType.Local) {
@@ -107,8 +107,8 @@ namespace VectorWar {
 
 			result = Session.StartSpectating(
 				out spectatorSession,
-				ref callbacks,
-				"vectorwar",
+				callbacks,
+				"VectorWar",
 				numPlayers,
 				sizeof(int),
 				localPort,
@@ -190,6 +190,8 @@ namespace VectorWar {
 			for (i = 0; i < inputtable.Length; i++) {
 				if (UnityEngine.Input.GetKey(inputtable[i].KeyCode)) {
 					inputs |= (int) inputtable[i].Input;
+				} else if (inputtable[i].KeyCode == KeyCode.LeftArrow) {
+					inputs |= (int) inputtable[i].Input;
 				}
 			}
    
@@ -201,11 +203,9 @@ namespace VectorWar {
 		public static void RunFrame() {
 			ErrorCode result = ErrorCode.Success;
 			int disconnectFlags = 0;
-			Array inputs = new int[GameState.MAX_SHIPS];
+			int[] inputs = new int[GameState.MAX_SHIPS];
 
-			for (int i = 0; i < inputs.Length; i++) {
-				inputs.SetValue(0, i);
-			}
+			for (int i = 0; i < inputs.Length; i++) { inputs[i] = 0; }
 
 			if (NonGameState.local_player_handle.HandleValue != PlayerHandle.kInvalidHandle) {
 				int input = ReadInputs();
@@ -217,6 +217,7 @@ namespace VectorWar {
 				SerializedInput[2] = (byte) (input >> 16);
 				SerializedInput[3] = (byte) (input >> 24);
 
+				// XXX LOH size should 4 bytes? check inside, erroneously using serializedInputLength?
 				result = session.AddLocalInput(NonGameState.local_player_handle, SerializedInput, sizeof(int)); // NOTE hardcoding input type
 			}
 
@@ -224,11 +225,11 @@ namespace VectorWar {
 			// ggpo will modify the input list with the correct inputs to use and
 			// return 1.
 			if (GGPort.Types.GGPOSucceeded(result)) {
-				result = session.SynchronizeInput(ref inputs, sizeof(int) * GameState.MAX_SHIPS, ref disconnectFlags);
+				result = session.SynchronizeInput(inputs, sizeof(int) * GameState.MAX_SHIPS, ref disconnectFlags);
 				if (GGPort.Types.GGPOSucceeded(result)) {
 					// inputs[0] and inputs[1] contain the inputs for p1 and p2.  Advance
 					// the game by 1 frame using those inputs.
-					AdvanceFrame(inputs as int[], disconnectFlags);
+					AdvanceFrame(inputs, disconnectFlags);
 				}
 			}
 
@@ -305,7 +306,7 @@ namespace VectorWar {
 		* Notification from GGPO that something has happened.  Update the status
 		* text at the bottom of the screen to notify the user.
 		*/
-		public static bool OnEvent(ref Event info) {
+		public static bool OnEvent(Event info) {
 			switch (info.code) {
 				case EventCode.ConnectedToPeer:
 					NonGameState.SetConnectState(info.connected.player, PlayerConnectState.Synchronizing);
@@ -345,13 +346,13 @@ namespace VectorWar {
 		* during a rollback.
 		*/
 		public static bool AdvanceFrame(int flags) {
-			Array inputs = new int[GameState.MAX_SHIPS];
+			int[] inputs = new int[GameState.MAX_SHIPS];
 			int disconnectFlags = 0;
 
 			// Make sure we fetch new inputs from GGPO and use those to update
 			// the game state instead of reading from the keyboard.
-			session.SynchronizeInput(ref inputs, sizeof(int) * GameState.MAX_SHIPS, ref disconnectFlags);
-			AdvanceFrame(inputs as int[], disconnectFlags);
+			session.SynchronizeInput(inputs, sizeof(int) * GameState.MAX_SHIPS, ref disconnectFlags);
+			AdvanceFrame(inputs, disconnectFlags);
 			return true;
 		}
 		

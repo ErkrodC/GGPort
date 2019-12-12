@@ -9,57 +9,59 @@ using System;
 using System.Net;
 
 namespace GGPort {
-	public class SpectatorBackend : Session, IPollSink, UDP.Callbacks {
-		public const int SPECTATOR_FRAME_BUFFER_SIZE = 64;
-		
-		protected SessionCallbacks _callbacks;
-		protected Poll _poll;
-		protected UDP _udp;
-		protected UDPProtocol _host;
-		protected bool _synchronizing;
-		protected int _input_size;
-		protected int _num_players;
-		protected int _next_input_to_send;
-		protected GameInput[] _inputs = new GameInput[SPECTATOR_FRAME_BUFFER_SIZE];
+	public class SpectatorBackend : Session, IPollSink, Transport.ICallbacks {
+		private const int kSpectatorFrameBufferSize = 64;
+
+		private readonly SessionCallbacks callbacks;
+		private readonly Poll poll;
+		private readonly Transport transport;
+		private readonly Peer host;
+		private readonly int inputSize;
+		private readonly int numPlayers;
+		private readonly GameInput[] inputs;
+		private bool isSynchronizing;
+		private int nextInputToSend;
 
 		public SpectatorBackend(
-			ref SessionCallbacks cb,
-			string gamename,
-			ushort localport,
-			int num_players,
-			int input_size,
+			SessionCallbacks cb,
+			string gameName,
+			ushort localPort,
+			int numPlayers,
+			int inputSize,
 			IPEndPoint hostEndPoint
 		) {
-			_num_players = num_players;
-			_input_size = input_size;
-			_next_input_to_send = 0;
+			this.numPlayers = numPlayers;
+			this.inputSize = inputSize;
+			nextInputToSend = 0;
 				
-			_callbacks = cb;
-			_synchronizing = true;
+			callbacks = cb;
+			isSynchronizing = true;
 
-			for (int i = 0; i < _inputs.Length; i++) {
-				_inputs[i].Frame = -1;
+			inputs = new GameInput[kSpectatorFrameBufferSize];
+			for (int i = 0; i < inputs.Length; i++) {
+				inputs[i].Frame = -1;
 			}
 
 			// Initialize the UDP port
-			_udp.Init(localport, ref _poll, this);
+			transport.Init(localPort, poll, this);
 
 			// Init the host endpoint
-			_host.Init(ref _udp, ref _poll, 0, hostEndPoint, null);
-			_host.Synchronize();
+			host = new Peer();
+			host.Init(ref transport, ref poll, 0, hostEndPoint, null); // TODO maybe remove init and set with ctor?
+			host.Synchronize();
 
 			// Preload the ROM
-			_callbacks.BeginGame(gamename);
+			callbacks.BeginGame(gameName);
 		}
 
 		public override ErrorCode Idle(int timeout) {
-			_poll.Pump(0);
+			poll.Pump(0);
 
 			PollUdpProtocolEvents();
 			return ErrorCode.Success;
 		}
 
-		public override ErrorCode AddPlayer(ref Player player, out PlayerHandle handle) {
+		public override ErrorCode AddPlayer(Player player, out PlayerHandle handle) {
 			handle = new PlayerHandle(-1);
 			return ErrorCode.Unsupported;
 		}
@@ -68,41 +70,41 @@ namespace GGPort {
 			return ErrorCode.Success;
 		}
 
-		public override unsafe ErrorCode SynchronizeInput(ref Array values, int size, ref int disconnectFlags) {
+		public override unsafe ErrorCode SynchronizeInput(Array values, int size, ref int disconnectFlags) {
 			// Wait until we've started to return inputs.
-			if (_synchronizing) {
+			if (isSynchronizing) {
 				return ErrorCode.NotSynchronized;
 			}
 
-			GameInput input = _inputs[_next_input_to_send % SPECTATOR_FRAME_BUFFER_SIZE];
-			if (input.Frame < _next_input_to_send) {
+			GameInput input = inputs[nextInputToSend % kSpectatorFrameBufferSize];
+			if (input.Frame < nextInputToSend) {
 				// Haven't received the input from the host yet.  Wait
 				return ErrorCode.PredictionThreshold;
 			}
-			if (input.Frame > _next_input_to_send) {
+			if (input.Frame > nextInputToSend) {
 				// The host is way way way far ahead of the spectator.  How'd this
 				// happen?  Anyway, the input we need is gone forever.
 				return ErrorCode.GeneralFailure;
 			}
 
-			Platform.Assert(size >= _input_size * _num_players);
+			Platform.Assert(size >= inputSize * numPlayers);
 
-			int valuesSizeInBytes = _input_size * _num_players;
+			int valuesSizeInBytes = inputSize * numPlayers;
 			for (int i = 0; i < valuesSizeInBytes; i++) {
 				Buffer.SetByte(values, i, input.Bits[i]);
 			}
 			
 			disconnectFlags = 0; // xxx: should get them from the host!
 			
-			_next_input_to_send++;
+			nextInputToSend++;
 
-			_inputs[_next_input_to_send % SPECTATOR_FRAME_BUFFER_SIZE] = input;
+			inputs[nextInputToSend % kSpectatorFrameBufferSize] = input;
 
 			return ErrorCode.Success;
 		}
 
 		public override ErrorCode AdvanceFrame() {
-			LogUtil.Log($"End of frame ({_next_input_to_send - 1})...{Environment.NewLine}");
+			LogUtil.Log($"End of frame ({nextInputToSend - 1})...{Environment.NewLine}");
 			Idle(0);
 			PollUdpProtocolEvents();
 
@@ -130,73 +132,73 @@ namespace GGPort {
 			return ErrorCode.Unsupported;
 		}
 
-		public virtual void OnMsg(IPEndPoint from, ref UDPMessage msg, int len) {
-			if (_host.HandlesMsg(ref from, ref msg)) {
-				_host.OnMsg(ref msg, len);
+		public virtual void OnMsg(IPEndPoint from, PeerMessage msg) {
+			if (host.HandlesMsg(from)) {
+				host.OnMsg(msg);
 			}
 		}
 
 		protected void PollUdpProtocolEvents() {
-			while (_host.GetEvent(out UDPProtocol.Event evt)) {
+			while (host.GetEvent(out Peer.Event evt)) {
 				OnUdpProtocolEvent(ref evt);
 			}
 		}
 
-		protected void OnUdpProtocolEvent(ref UDPProtocol.Event evt) {
+		protected void OnUdpProtocolEvent(ref Peer.Event evt) {
 			Event info = new Event();
 			
 			switch (evt.type) {
-				case UDPProtocol.Event.Type.Connected: {
+				case Peer.Event.Type.Connected: {
 					info.code = EventCode.ConnectedToPeer;
 					info.connected.player = new PlayerHandle(0);
-					_callbacks.OnEvent(ref info);
+					callbacks.OnEvent(info);
 					break;
 				}
-				case UDPProtocol.Event.Type.Synchronizing: {
+				case Peer.Event.Type.Synchronizing: {
 					info.code = EventCode.SynchronizingWithPeer;
 					info.synchronizing.player = new PlayerHandle(0);
-					info.synchronizing.count = evt.synchronizing.count;
-					info.synchronizing.total = evt.synchronizing.total;
-					_callbacks.OnEvent(ref info);
+					info.synchronizing.count = evt.synchronizing.Count;
+					info.synchronizing.total = evt.synchronizing.Total;
+					callbacks.OnEvent(info);
 					break;
 				}
-				case UDPProtocol.Event.Type.Synchronized: {
-					if (_synchronizing) {
+				case Peer.Event.Type.Synchronized: {
+					if (isSynchronizing) {
 						info.code = EventCode.SynchronizedWithPeer;
 						info.synchronized.player = new PlayerHandle(0);
-						_callbacks.OnEvent(ref info);
+						callbacks.OnEvent(info);
 
 						info.code = EventCode.Running;
-						_callbacks.OnEvent(ref info);
-						_synchronizing = false;
+						callbacks.OnEvent(info);
+						isSynchronizing = false;
 					}
 					break;
 				}
-				case UDPProtocol.Event.Type.NetworkInterrupted: {
+				case Peer.Event.Type.NetworkInterrupted: {
 					info.code = EventCode.ConnectionInterrupted;
 					info.connectionInterrupted.player = new PlayerHandle(0);
-					info.connectionInterrupted.disconnect_timeout = evt.network_interrupted.disconnect_timeout;
-					_callbacks.OnEvent(ref info);
+					info.connectionInterrupted.disconnect_timeout = evt.network_interrupted.DisconnectTimeout;
+					callbacks.OnEvent(info);
 					break;
 				}
-				case UDPProtocol.Event.Type.NetworkResumed: {
+				case Peer.Event.Type.NetworkResumed: {
 					info.code = EventCode.ConnectionResumed;
 					info.connectionResumed.player = new PlayerHandle(0);
-					_callbacks.OnEvent(ref info);
+					callbacks.OnEvent(info);
 					break;
 				}
-				case UDPProtocol.Event.Type.Disconnected: {
+				case Peer.Event.Type.Disconnected: {
 					info.code = EventCode.DisconnectedFromPeer;
 					info.disconnected.player = new PlayerHandle(0);
-					_callbacks.OnEvent(ref info);
+					callbacks.OnEvent(info);
 					break;
 				}
-				case UDPProtocol.Event.Type.Input: {
-					GameInput input = evt.input.input;
+				case Peer.Event.Type.Input: {
+					GameInput input = evt.input;
 
-					_host.SetLocalFrameNumber(input.Frame);
-					_host.SendInputAck();
-					_inputs[input.Frame % SPECTATOR_FRAME_BUFFER_SIZE] = input;
+					host.SetLocalFrameNumber(input.Frame);
+					host.SendInputAck();
+					inputs[input.Frame % kSpectatorFrameBufferSize] = input;
 					break;
 				}
 			}

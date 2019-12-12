@@ -16,7 +16,7 @@ namespace GGPort {
 		public const int kMaxPlayers = 2;
 		public const int kNullFrame = -1;
 		
-		public int Frame { get; set; }
+		public int Frame { get; set; } // TODO do props get copied on pass for val type?
 		public int Size { get; set; } /* size in bytes of the entire input for all players */
 		public fixed byte Bits[kMaxBytes * kMaxPlayers];
 
@@ -42,15 +42,13 @@ namespace GGPort {
 			Size = size;
 
 			const int kSizeOfBits = kMaxBytes * kMaxPlayers;
-			for (int i = 0; i < kSizeOfBits; i++) {
-				Bits[i] = 0;
-			}
-			
-			if (bits != null) {
-				int startOffset = offset * size;
-				for (int i = 0; i < size; i++) {
-					Bits[startOffset + i] = bits[i];
-				}
+			for (int i = 0; i < kSizeOfBits; i++) { Bits[i] = 0; }
+
+			if (bits == null) { return; }
+
+			int startOffset = offset * size;
+			for (int i = 0; i < size; i++) {
+				Bits[startOffset + i] = bits[i];
 			}
 		}
 
@@ -97,7 +95,7 @@ namespace GGPort {
 			LogUtil.Log($"{prefix}{Desc(showFrame)}{Environment.NewLine}");
 		}
 
-		public bool Equal(ref GameInput other, bool bitsOnly = false) {
+		public bool Equal(GameInput other, bool bitsOnly = false) {
 			if (!bitsOnly && Frame != other.Frame) {
 				LogUtil.Log($"frames don't match: {Frame}, {other.Frame}{Environment.NewLine}");
 			}
@@ -107,17 +105,14 @@ namespace GGPort {
 			}
 
 			bool bitsAreEqual = true;
-
 			for (int i = 0; i < Size; i++) {
-				if (Bits[i] != other.Bits[i]) {
-					bitsAreEqual = false;
-					break;
-				}
+				if (Bits[i] == other.Bits[i]) { continue; }
+
+				bitsAreEqual = false;
+				break;
 			}
 			
-			if (!bitsAreEqual) {
-				LogUtil.Log($"bits don't match{Environment.NewLine}");
-			}
+			if (!bitsAreEqual) { LogUtil.Log($"bits don't match{Environment.NewLine}"); }
 
 			Platform.Assert(Size != 0 && other.Size != 0);
 			
