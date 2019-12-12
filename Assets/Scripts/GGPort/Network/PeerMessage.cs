@@ -69,6 +69,27 @@ namespace GGPort {
 			private fixed int peerLastFrames[kMaxPlayers];
 			public fixed byte bits[kMaxCompressedBits]; /* must be last */
 
+			public Input(SerializationInfo info, StreamingContext context) : this() {
+				bool[] peerDisconnectedFlagsArray = info.GetValue(nameof(peerDisconnectedFlags), typeof(bool[])) as bool[];
+				int[] peerLastFramesArray = info.GetValue(nameof(peerLastFrames), typeof(int[])) as int[];
+
+				for (int i = 0; i < kMaxPlayers; i++) {
+					peerDisconnectedFlags[i] = peerDisconnectedFlagsArray[i];
+					peerLastFrames[i] = peerLastFramesArray[i];
+				}
+
+				byte[] bitsArray = info.GetValue(nameof(bits), typeof(byte[])) as byte[];
+				for (int i = 0; i < kMaxCompressedBits; i++) {
+					bits[i] = bitsArray[i];
+				}
+
+				startFrame = info.GetInt32(nameof(startFrame));
+				disconnectRequested = info.GetBoolean(nameof(disconnectRequested));
+				ackFrame = info.GetInt32(nameof(ackFrame));
+				numBits = info.GetUInt16(nameof(numBits));
+				inputSize = info.GetByte(nameof(inputSize));
+			}
+
 			public ConnectStatus GetPeerConnectStatus(int index) {
 				return new ConnectStatus {
 					IsDisconnected = peerDisconnectedFlags[index],
@@ -103,10 +124,11 @@ namespace GGPort {
 					bitsArray[i] = bits[i];
 				}
 				
-				info.AddValue(nameof(disconnectRequested), disconnectRequested, typeof(bool));
-				info.AddValue(nameof(ackFrame), ackFrame, typeof(int));
-				info.AddValue(nameof(numBits), numBits, typeof(ushort));
-				info.AddValue(nameof(inputSize), inputSize, typeof(byte));
+				info.AddValue(nameof(startFrame), startFrame);
+				info.AddValue(nameof(disconnectRequested), disconnectRequested);
+				info.AddValue(nameof(ackFrame), ackFrame);
+				info.AddValue(nameof(numBits), numBits);
+				info.AddValue(nameof(inputSize), inputSize);
 				info.AddValue(nameof(peerDisconnectedFlags), peerDisconnectedFlagsArray, typeof(bool[]));
 				info.AddValue(nameof(peerLastFramesArray), peerLastFramesArray, typeof(int[]));
 				info.AddValue(nameof(bits), bitsArray, typeof(byte[]));

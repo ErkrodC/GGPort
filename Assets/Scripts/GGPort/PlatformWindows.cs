@@ -52,7 +52,7 @@ namespace GGPort {
 				}
 			}
 			
-			LogUtil.Log(msg);
+			LogUtil.Log($"{Environment.NewLine}{msg}");
 			Debugger.Break();
 			Environment.Exit(0);
 		}

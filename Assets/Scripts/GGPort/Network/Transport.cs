@@ -58,7 +58,7 @@ namespace GGPort {
 				Log($"sent packet length {len} to {dst.Address}:{dst.Port} (ret:{sentBytes}).{Environment.NewLine}");
 			} catch (Exception exception) {
 				Log($"{exception.Message}.{Environment.NewLine}");
-				Platform.AssertFailed(exception.Message);
+				Platform.AssertFailed(exception.ToString()); // TODO do .ToString() for exceptions elsewhere
 				throw;
 			}
 
@@ -91,7 +91,7 @@ namespace GGPort {
 					// TODO: handle len == 0... indicates a disconnect.
 				} catch (Exception exception) {
 					Log($"{exception.Message}{Environment.NewLine}");
-					Platform.AssertFailed(exception.Message);
+					Platform.AssertFailed(exception.ToString());
 					break;
 				} 
 			}
