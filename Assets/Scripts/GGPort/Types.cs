@@ -3,13 +3,14 @@ using System.Runtime.InteropServices;
 
 // TODO make game state params determinable with generic type param
 namespace GGPort {
+	// TODO rename
 	public static class Types {
 		public const int kMaxPlayers = 4;
-		public const int kMaxPreditionFrames = 8;
+		public const int kMaxPredictionFrames = 8;
 		public const int kMaxSpectators = 32;
 		public const int kSpectatorInputInterval = 4;
 
-		public static bool GGPOSucceeded(ErrorCode result) {
+		public static bool Succeeded(this ErrorCode result) {
 			return result == ErrorCode.Success;
 		}
 	}
@@ -24,7 +25,7 @@ namespace GGPort {
 		}
 	}
 
-	public enum GGPOPlayerType {
+	public enum PlayerType {
 		Local,
 		Remote,
 		Spectator
@@ -56,15 +57,15 @@ namespace GGPort {
 
 	public struct Player {
 		public int Size;
-		public GGPOPlayerType Type;
+		public PlayerType Type;
 		public int PlayerNum;
 		public IPEndPoint EndPoint;
 
 		public int CalculateSize() {
 			int siz = sizeof(int);
-			siz += sizeof(GGPOPlayerType);
+			siz += sizeof(PlayerType);
 			siz += sizeof(int);
-			siz += Type == GGPOPlayerType.Local ? 0 : EndPoint.Address.GetAddressBytes().Length;
+			siz += Type == PlayerType.Local ? 0 : EndPoint.Address.GetAddressBytes().Length;
 			siz += sizeof(int);
 
 			return siz;
@@ -129,7 +130,7 @@ namespace GGPort {
 	* by the on_event callback.  See GGPOEventCode, above, for a detailed
 	* explanation of each event.
 	*/
-	[StructLayout(LayoutKind.Explicit)]
+	[StructLayout(LayoutKind.Explicit)] // TODO refactor into C# events which take the below structures as params, as per type;
 	public struct Event {
 		[FieldOffset(0)] public EventCode code;
 

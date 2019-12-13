@@ -18,7 +18,7 @@ namespace VectorWar {
 			instance = this;
 			VectorWar.LogCallback += Log;
 			
-			visualShips = new GameObject[GameState.MAX_SHIPS];
+			visualShips = new GameObject[GameState.kMaxShips];
 			for (int i = 0; i < visualShips.Length; i++) {
 				visualShips[i] = Instantiate(shipPrefab, gameCanvas.transform);
 				visualShips[i].SetActive(false);

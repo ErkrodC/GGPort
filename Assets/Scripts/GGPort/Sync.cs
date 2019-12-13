@@ -24,39 +24,6 @@ namespace GGPort {
 
 		private readonly CircularQueue<Event> eventQueue;
 		private readonly PeerMessage.ConnectStatus[] localConnectStatuses;
-		
-		public struct Config {
-			public readonly SessionCallbacks Callbacks;
-			public readonly int NumPredictionFrames;
-			public readonly int NumPlayers;
-			public readonly int InputSize;
-
-			public Config(SessionCallbacks callbacks, int numPredictionFrames) : this() {
-				Callbacks = callbacks;
-				NumPredictionFrames = numPredictionFrames;
-			}
-
-			public Config(SessionCallbacks callbacks, int numPredictionFrames, int numPlayers, int inputSize) {
-				Callbacks = callbacks;
-				NumPredictionFrames = numPredictionFrames;
-				NumPlayers = numPlayers;
-				InputSize = inputSize;
-			}
-		};
-		
-		// TODO remove? does nothing here but might do something in syncTest || spectator backends
-		public struct Event {
-			public readonly Type type;
-			public readonly ConfirmedInput confirmedInput;
-			
-			public enum Type {
-				ConfirmedInput,
-			}
-			
-			public struct ConfirmedInput {
-				public readonly GameInput Input;
-			}
-		}
 
 		public Sync(PeerMessage.ConnectStatus[] localConnectStatuses) {
 			eventQueue = new CircularQueue<Event>(32);
@@ -354,6 +321,39 @@ namespace GGPort {
 		private void ResetPrediction(int frameNumber) {
 			for (int i = 0; i < config.NumPlayers; i++) {
 				inputQueues[i].ResetPrediction(frameNumber);
+			}
+		}
+		
+		public struct Config {
+			public readonly SessionCallbacks Callbacks;
+			public readonly int NumPredictionFrames;
+			public readonly int NumPlayers;
+			public readonly int InputSize;
+
+			public Config(SessionCallbacks callbacks, int numPredictionFrames) : this() {
+				Callbacks = callbacks;
+				NumPredictionFrames = numPredictionFrames;
+			}
+
+			public Config(SessionCallbacks callbacks, int numPredictionFrames, int numPlayers, int inputSize) {
+				Callbacks = callbacks;
+				NumPredictionFrames = numPredictionFrames;
+				NumPlayers = numPlayers;
+				InputSize = inputSize;
+			}
+		};
+		
+		// TODO remove? does nothing here but might do something in syncTest || spectator backends
+		public struct Event {
+			public readonly Type type;
+			public readonly ConfirmedInput confirmedInput;
+			
+			public enum Type {
+				ConfirmedInput,
+			}
+			
+			public struct ConfirmedInput {
+				public readonly GameInput Input;
 			}
 		}
 	}

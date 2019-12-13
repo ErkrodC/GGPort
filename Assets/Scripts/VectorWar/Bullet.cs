@@ -4,9 +4,9 @@ using UnityEngine;
 namespace VectorWar {
 	[Serializable]
 	public struct Bullet {
-		public const int BULLET_SPEED = 5;
-		public const int BULLET_COOLDOWN = 8;
-		public const int BULLET_DAMAGE = 10;
+		public const int kBulletSpeed = 5;
+		public const int kBulletCooldown = 8;
+		public const int kBulletDamage = 10;
 
 		public bool active;
 		public Vector2 position;

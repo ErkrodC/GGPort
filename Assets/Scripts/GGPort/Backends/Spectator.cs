@@ -204,10 +204,9 @@ namespace GGPort {
 			}
 		}
 		
-		// TODO fix param names, 4 fxns
-		public virtual bool OnHandlePoll(object TODO) { return true; }
-		public virtual bool OnMsgPoll(object TODO) { return true; }
-		public virtual bool OnPeriodicPoll(object TODO0, long TODO1) { return true; }
+		public virtual bool OnHandlePoll(object cookie) { return true; }
+		public virtual bool OnMsgPoll(object cookie) { return true; }
+		public virtual bool OnPeriodicPoll(object cookie, long lastFireTime) { return true; }
 		public virtual bool OnLoopPoll(object cookie) { return true; }
 	}
 }

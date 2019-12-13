@@ -15,7 +15,7 @@ using UnityEngine;
 namespace VectorWar {
 	[Serializable]
 	public class GameState {
-		public const int MAX_SHIPS = 4;
+		public const int kMaxShips = 4;
 
 		public int FrameNumber;
 		public Rect Bounds;
@@ -28,11 +28,7 @@ namespace VectorWar {
 			Deserialize(buffer);
 		}
 
-		/*
-		* InitGameState --
-		*
-		* Initialize our game state.
-		*/
+		// Initialize our game state.
 		public void Init(int numPlayers) {
 			int i, w, h, r;
 
@@ -45,7 +41,7 @@ namespace VectorWar {
 			FrameNumber = 0;
 			NumShips = numPlayers;
 			
-			Ships = new Ship[MAX_SHIPS];
+			Ships = new Ship[kMaxShips];
 			for (int j = 0; j < Ships.Length; j++) {
 				Ships[j] = new Ship();
 			}
@@ -107,20 +103,20 @@ namespace VectorWar {
 
 			if (ship.cooldown == 0) {
 				if (fire != 0) {
-					LogUtil.Log($"firing bullet.{Environment.NewLine}");
+					LogUtil.Log($"Firing bullet.{Environment.NewLine}"); // TODO tag based log? to easily enable/disable entire categories
 					for (int i = 0; i < Ship.MAX_BULLETS; i++) {
 						float dx = (float) Math.Cos(MathUtil.degtorad(ship.heading)); // NOTE possible sources of non-determinism
 						float dy = (float) Math.Sin(MathUtil.degtorad(ship.heading));
 
-						if (!ship.bullets[i].active) {
-							ship.bullets[i].active = true;
-							ship.bullets[i].position.x = ship.position.x + (ship.radius * dx); // NOTE possible sources of non-determinism
-							ship.bullets[i].position.y = ship.position.y + (ship.radius * dy);
-							ship.bullets[i].velocity.x = ship.velocity.x + (Bullet.BULLET_SPEED * dx);
-							ship.bullets[i].velocity.y = ship.velocity.y + (Bullet.BULLET_SPEED * dy);
-							ship.cooldown = Bullet.BULLET_COOLDOWN;
-							break;
-						}
+						if (ship.bullets[i].active) { continue; }
+
+						ship.bullets[i].active = true;
+						ship.bullets[i].position.x = ship.position.x + (ship.radius * dx); // NOTE possible sources of non-determinism
+						ship.bullets[i].position.y = ship.position.y + (ship.radius * dy);
+						ship.bullets[i].velocity.x = ship.velocity.x + (Bullet.kBulletSpeed * dx);
+						ship.bullets[i].velocity.y = ship.velocity.y + (Bullet.kBulletSpeed * dy);
+						ship.cooldown = Bullet.kBulletCooldown;
+						break;
 					}
 				}
 			}
@@ -179,12 +175,12 @@ namespace VectorWar {
 					} else {
 						for (int j = 0; j < NumShips; j++) {
 							Ship other = Ships[j];
-							if (Vector2.Distance(bullet.position, other.position) < other.radius) {
-								ship.score++;
-								other.health -= Bullet.BULLET_DAMAGE;
-								bullet.active = false;
-								break;
-							}
+							if (Vector2.Distance(bullet.position, other.position) >= other.radius) { continue; }
+
+							ship.score++;
+							other.health -= Bullet.kBulletDamage;
+							bullet.active = false;
+							break;
 						}
 					}
 				}
@@ -220,8 +216,8 @@ namespace VectorWar {
 			NumShips = deserializedGameState.NumShips;
 
 			// TODO dont wanna create garbaj
-			Ships = new Ship[MAX_SHIPS];
-			for (int i = 0; i < MAX_SHIPS; i++) {
+			Ships = new Ship[kMaxShips];
+			for (int i = 0; i < kMaxShips; i++) {
 				// TODO not sure this'll work, might wanna use json for the time being?
 				Ships[i] = deserializedGameState.Ships[i];
 			}
@@ -241,7 +237,7 @@ namespace VectorWar {
 				sizeof(int)
 				+ sizeof(Rect)
 				+ sizeof(int)
-				+ Ship.Size() * MAX_SHIPS;
+				+ Ship.Size() * kMaxShips;
 		}
 
 		public void Serialize(int size, out byte[] buffer) {

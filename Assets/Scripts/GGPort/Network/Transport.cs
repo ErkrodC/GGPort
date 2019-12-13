@@ -57,7 +57,6 @@ namespace GGPort {
 				 sentBytes = socket.SendTo(buffer, len, flags, dst);
 				Log($"sent packet length {len} to {dst.Address}:{dst.Port} (ret:{sentBytes}).{Environment.NewLine}");
 			} catch (Exception exception) {
-				Log($"{exception.Message}.{Environment.NewLine}");
 				Platform.AssertFailed(exception.ToString()); // TODO do .ToString() for exceptions elsewhere
 				throw;
 			}
@@ -98,7 +97,7 @@ namespace GGPort {
 			return true;
 		}
 
-		public static Socket CreateSocket(ushort bind_port, int retries) {
+		public static Socket CreateSocket(ushort portToBindTo, int retries) {
 			Socket s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
 			s.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, 1);
 			//s.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.DontLinger, true); // TODO why doesn't this work?
@@ -106,14 +105,13 @@ namespace GGPort {
 			// non-blocking...
 			s.Blocking = false;
 
-			for (ushort port = bind_port; port <= bind_port + retries; port++) {
+			for (ushort port = portToBindTo; port <= portToBindTo + retries; port++) {
 				try {
 					s.Bind(new IPEndPoint(IPAddress.Any, port));
 					Log($"Udp bound to port: {port}.{Environment.NewLine}");
 					return s;
-				} catch (Exception e) {
-					Console.WriteLine(e);
-					//break; // TODO remove
+				} catch (Exception exception) {
+					Platform.AssertFailed(exception.ToString());
 				}
 			}
 			
@@ -121,12 +119,11 @@ namespace GGPort {
 			return null;
 		}
 		
-		// TODO fix param names, 4 fxns
-		// TODO in fact, could probably use async C# sockets over polling 
-		public virtual bool OnHandlePoll(object TODO) { return true; }
-		public virtual bool OnMsgPoll(object TODO) { return true; }
-		public virtual bool OnPeriodicPoll(object TODO0, long TODO1) { return true; }
+		public virtual bool OnHandlePoll(object cookie) { return true; }
+		public virtual bool OnMsgPoll(object cookie) { return true; }
+		public virtual bool OnPeriodicPoll(object cookie, long lastFireTime) { return true; }
 		
+		// TODO rename after perf tools up
 		public struct Stats {
 			public readonly int bytes_sent;
 			public readonly int packets_sent;

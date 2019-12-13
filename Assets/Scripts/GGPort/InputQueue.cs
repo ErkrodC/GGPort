@@ -9,8 +9,8 @@ using System;
 
 namespace GGPort {
 	public class InputQueue {
-		public const int kInputQueueLength = 128;
-		public const int DEFAULT_INPUT_SIZE = 4;
+		private const int kInputQueueLength = 128;
+		private const int kDefaultInputSize = 4;
 
 		private int id;
 		private int head;
@@ -28,7 +28,7 @@ namespace GGPort {
 		private GameInput[] inputs;
 		private GameInput prediction;
 
-		public InputQueue(int inputSize = DEFAULT_INPUT_SIZE) {
+		public InputQueue(int inputSize = kDefaultInputSize) {
 			Init(-1, inputSize);
 			inputs = new GameInput[kInputQueueLength];
 		}

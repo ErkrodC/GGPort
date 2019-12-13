@@ -24,7 +24,10 @@ namespace GGPort {
 		private const int kNetworkStatsInterval = 1000;
 		private const int kUDPShutdownTimer = 5000;
 		private const int kMaxSeqDistance = 1 << 15;
-		
+		private static readonly int kSendLatency = Platform.GetConfigInt("ggpo.network.delay");
+		private static readonly Random kRandom = new Random();
+
+
 		// Network transmission information
 		private Transport transport;
 		private IPEndPoint peerAddress;
@@ -32,7 +35,6 @@ namespace GGPort {
 		private int queueID;
 		private ushort remoteMagicNumber;
 		private bool connected;
-		private static readonly int kSendLatency = Platform.GetConfigInt("ggpo.network.delay");
 		private OutOfOrderPacket outOfOrderPacket;
 		private readonly CircularQueue<StampedPeerMessage> sendQueue;
 		private PeerMessage.ConnectStatus[] remoteStatuses;
@@ -119,7 +121,7 @@ namespace GGPort {
 			}
 
 			peerAddress = default;
-			outOfOrderPacket.Init(queueID);
+			outOfOrderPacket = new OutOfOrderPacket(queueID);
 			outOfOrderPacket.Clear();
 
 			messageHandlersByType = new Dictionary<PeerMessage.MsgType, MessageHandler> {
@@ -245,21 +247,27 @@ namespace GGPort {
 			shutdownTimeout = Platform.GetCurrentTimeMS() + kUDPShutdownTimer;
 		}
 
-		public void GetNetworkStats(ref NetworkStats stats) { // TODO cleaner to serve stats struct from here? to get out over ref
-			stats.network.Ping = roundTripTime;
-			stats.network.SendQueueLength = pendingOutgoingInputs.Count;
-			stats.network.KbpsSent = kbpsSent;
-			stats.timeSync.RemoteFramesBehind = remoteFrameAdvantage;
-			stats.timeSync.LocalFramesBehind = localFrameAdvantage;
+		public NetworkStats GetNetworkStats() {
+			return new NetworkStats {
+				network = {
+					Ping = roundTripTime,
+					SendQueueLength = pendingOutgoingInputs.Count,
+					KbpsSent = kbpsSent
+				},
+				timeSync = {
+					RemoteFramesBehind = remoteFrameAdvantage,
+					LocalFramesBehind = localFrameAdvantage
+				}
+			};
 		}
 
-		public bool GetEvent(out Event e) {
+		public bool GetEvent(out Event evt) {
 			if (eventQueue.Count == 0) {
-				e = default;
+				evt = default;
 				return false;
 			}
 
-			e = eventQueue.Pop();
+			evt = eventQueue.Pop();
 			
 			return true;
 		}
@@ -274,9 +282,9 @@ namespace GGPort {
 
 			/*
 			* Our frame advantage is how many frames *behind* the other guy
-			* we are.  Counter-intuative, I know.  It's an advantage because
+			* we are.  Counter-intuitive, I know.  It's an advantage because
 			* it means they'll have to predict more often and our moves will
-			* pop more frequenetly.
+			* pop more frequently.
 			*/
 			localFrameAdvantage = remoteFrame - localFrame;
 		}
@@ -286,7 +294,7 @@ namespace GGPort {
 			return timeSync.recommend_frame_wait_duration(false);
 		}
 
-		public void SetDisconnectTimeout(uint timeout) { // TODO cleanup as Setter?
+		public void SetDisconnectTimeout(uint timeout) {
 			disconnectTimeout = timeout;
 		}
 
@@ -294,7 +302,7 @@ namespace GGPort {
 			disconnectNotifyStart = timeout;
 		}
 
-		protected void UpdateNetworkStats() {
+		private void UpdateNetworkStats() {
 			long now = Platform.GetCurrentTimeMS();
 
 			if (statsStartTime == 0) {
@@ -332,7 +340,7 @@ namespace GGPort {
 		// TODO revalidate these log wrappers as they may add some info to the string passed to global log
 		private void Log(string msg) => Log(queueID, msg);
 		private static void Log(int queueID, string msg) {
-			string prefix = $"udpproto{queueID} ";
+			string prefix = $"{nameof(Peer)} {queueID} ";
 			LogUtil.Log(prefix + msg);
 		}
 
@@ -372,9 +380,9 @@ namespace GGPort {
 					break;
 			}
 		}
-
+		
 		private void SendSyncRequest() {
-			state.sync.Random = (uint) (new Random().Next(1, ushort.MaxValue) & 0xFFFF); // TODO create outer random var
+			state.sync.Random = (uint) (kRandom.Next(1, ushort.MaxValue) & 0xFFFF);
 
 			PeerMessage msg = new PeerMessage(PeerMessage.MsgType.SyncRequest) {
 				syncRequest = {
@@ -434,10 +442,7 @@ namespace GGPort {
 			Log($"Sending rogue {nameof(OutOfOrderPacket)}!");
 
 			using (MemoryStream ms = new MemoryStream()) {
-				formatter.Serialize(
-					ms,
-					(PeerMessage) outOfOrderPacket.Message
-				); // TODO does this needs to cast from <UdpMsg?> to <UdpMsg> ???
+				formatter.Serialize(ms, outOfOrderPacket.Message);
 				bytesSent += transport.SendTo(ms.ToArray(), (int) ms.Length, 0, outOfOrderPacket.DestinationAddress);
 			} // TODO optimize/refactor
 
@@ -509,21 +514,21 @@ namespace GGPort {
 			SendMsg(msg);
 		}
 
-		private bool OnInvalid(PeerMessage msg) {
-			Platform.AssertFailed($"Invalid {nameof(msg)} in {nameof(Peer)}.");
+		private bool OnInvalid(PeerMessage incomingMessage) {
+			Platform.AssertFailed($"Invalid {nameof(incomingMessage)} in {nameof(Peer)}.");
 			return false;
 		}
 
-		private bool OnSyncRequest(PeerMessage msg) {
-			if (remoteMagicNumber != 0 && msg.header.MagicNumber != remoteMagicNumber) {
-				Log($"Ignoring sync request from unknown endpoint ({msg.header.MagicNumber} != {remoteMagicNumber}).{Environment.NewLine}");
+		private bool OnSyncRequest(PeerMessage incomingMessage) {
+			if (remoteMagicNumber != 0 && incomingMessage.header.MagicNumber != remoteMagicNumber) {
+				Log($"Ignoring sync request from unknown endpoint ({incomingMessage.header.MagicNumber} != {remoteMagicNumber}).{Environment.NewLine}");
 				
 				return false;
 			}
 
 			PeerMessage reply = new PeerMessage(PeerMessage.MsgType.SyncReply) {
 				syncReply = {
-					randomReply = msg.syncRequest.randomRequest
+					randomReply = incomingMessage.syncRequest.randomRequest
 				}
 			};
 
@@ -545,15 +550,15 @@ namespace GGPort {
 			return true;
 		}
 
-		private bool OnSyncReply(PeerMessage msg) {
+		private bool OnSyncReply(PeerMessage incomingMessage) {
 			if (currentState != State.Syncing) {
 				Log($"Ignoring SyncReply while not syncing.{Environment.NewLine}");
 				
-				return msg.header.MagicNumber == remoteMagicNumber;
+				return incomingMessage.header.MagicNumber == remoteMagicNumber;
 			}
 
-			if (msg.syncReply.randomReply != state.sync.Random) {
-				Log($"sync reply {msg.syncReply.randomReply} != {state.sync.Random}.  Keep looking...{Environment.NewLine}");
+			if (incomingMessage.syncReply.randomReply != state.sync.Random) {
+				Log($"sync reply {incomingMessage.syncReply.randomReply} != {state.sync.Random}.  Keep looking...{Environment.NewLine}");
 				
 				return false;
 			}
@@ -572,7 +577,7 @@ namespace GGPort {
 				QueueEvent(evt);
 				currentState = State.Running;
 				lastReceivedInput.Frame = -1;
-				remoteMagicNumber = msg.header.MagicNumber;
+				remoteMagicNumber = incomingMessage.header.MagicNumber;
 			} else {
 				state.sync.HasStartedSyncing = true;
 				
@@ -589,9 +594,9 @@ namespace GGPort {
 			return true;
 		}
 
-		private unsafe bool OnInput(PeerMessage incomingMsg) {
+		private unsafe bool OnInput(PeerMessage incomingMessage) {
 			// If a disconnect is requested, go ahead and disconnect now.
-			bool disconnectRequested = incomingMsg.input.disconnectRequested;
+			bool disconnectRequested = incomingMessage.input.disconnectRequested;
 			if (disconnectRequested) {
 				if (currentState != State.Disconnected && !disconnectEventSent) {
 					Log($"Disconnecting endpoint on remote request.{Environment.NewLine}");
@@ -602,7 +607,7 @@ namespace GGPort {
 				}
 			} else {
 				// Update the peer connection status if this peer is still considered to be part of the network.
-				incomingMsg.input.GetConnectStatuses(ref remoteStatuses);
+				incomingMessage.input.GetConnectStatuses(ref remoteStatuses);
 				for (int i = 0; i < peerConnectStatuses.Length; i++) {
 					Platform.Assert(remoteStatuses[i].LastFrame >= peerConnectStatuses[i].LastFrame);
 					
@@ -616,14 +621,14 @@ namespace GGPort {
 
 			// Decompress the input.
 			int lastReceivedFrameNumber = lastReceivedInput.Frame;
-			if (incomingMsg.input.numBits != 0) {
+			if (incomingMessage.input.numBits != 0) {
 				int offset = 0;
-				int numBits = incomingMsg.input.numBits;
-				int currentFrame = incomingMsg.input.startFrame;
+				int numBits = incomingMessage.input.numBits;
+				int currentFrame = incomingMessage.input.startFrame;
 
-				lastReceivedInput.Size = incomingMsg.input.inputSize;
+				lastReceivedInput.Size = incomingMessage.input.inputSize;
 				if (lastReceivedInput.Frame < 0) {
-					lastReceivedInput.Frame = incomingMsg.input.startFrame - 1;
+					lastReceivedInput.Frame = incomingMessage.input.startFrame - 1;
 				}
 
 				while (offset < numBits) {
@@ -635,7 +640,7 @@ namespace GGPort {
 					
 					bool useInputs = currentFrame == lastReceivedInput.Frame + 1;
 
-					byte* incomingBits = incomingMsg.input.bits;
+					byte* incomingBits = incomingMessage.input.bits;
 					while (BitVector.ReadBit(incomingBits, ref offset)) {
 						bool isOn = BitVector.ReadBit(incomingBits, ref offset);
 						int buttonBitIndex = BitVector.ReadNibblet(incomingBits, ref offset);
@@ -674,7 +679,7 @@ namespace GGPort {
 			Platform.Assert(lastReceivedInput.Frame >= lastReceivedFrameNumber);
 
 			// Get rid of our buffered input
-			while (pendingOutgoingInputs.Count != 0 && pendingOutgoingInputs.Peek().Frame < incomingMsg.input.ackFrame) {
+			while (pendingOutgoingInputs.Count != 0 && pendingOutgoingInputs.Peek().Frame < incomingMessage.input.ackFrame) {
 				Log($"Throwing away pending output frame {pendingOutgoingInputs.Peek().Frame}{Environment.NewLine}");
 				lastAckedInput = pendingOutgoingInputs.Pop();
 			}
@@ -682,9 +687,9 @@ namespace GGPort {
 			return true;
 		}
 
-		private bool OnInputAck(PeerMessage msg) {
+		private bool OnInputAck(PeerMessage incomingMessage) {
 			// Get rid of our buffered input
-			while (pendingOutgoingInputs.Count != 0 && pendingOutgoingInputs.Peek().Frame < msg.inputAck.ackFrame) {
+			while (pendingOutgoingInputs.Count != 0 && pendingOutgoingInputs.Peek().Frame < incomingMessage.inputAck.ackFrame) {
 				Log($"Throwing away pending output frame {pendingOutgoingInputs.Peek().Frame}{Environment.NewLine}");
 				lastAckedInput = pendingOutgoingInputs.Pop();
 			}
@@ -692,34 +697,34 @@ namespace GGPort {
 			return true;
 		}
 
-		private bool OnQualityReport(PeerMessage msg) {
+		private bool OnQualityReport(PeerMessage incomingMessage) {
 			// send a reply so the other side can compute the round trip transmit time.
 			PeerMessage reply = new PeerMessage(PeerMessage.MsgType.QualityReply) {
 				qualityReply = {
-					pong = msg.qualityReport.ping
+					pong = incomingMessage.qualityReport.ping
 				}
 			};
 			
 			SendMsg(reply);
 
-			remoteFrameAdvantage = msg.qualityReport.frameAdvantage;
+			remoteFrameAdvantage = incomingMessage.qualityReport.frameAdvantage;
 			
 			return true;
 		}
 
-		private bool OnQualityReply(PeerMessage msg) {
-			roundTripTime = (int) (Platform.GetCurrentTimeMS() - msg.qualityReply.pong);
+		private bool OnQualityReply(PeerMessage incomingMessage) {
+			roundTripTime = (int) (Platform.GetCurrentTimeMS() - incomingMessage.qualityReply.pong);
 			
 			return true;
 		}
 
-		private bool OnKeepAlive(PeerMessage msg) {
+		private bool OnKeepAlive(PeerMessage incomingMessage) {
 			return true;
 		}
 		
-		public virtual bool OnHandlePoll(object TODO) { return true; }
-		public virtual bool OnMsgPoll(object TODO) { return true; }
-		public virtual bool OnPeriodicPoll(object TODO0, long TODO1) { return true; }
+		public virtual bool OnHandlePoll(object cookie) { return true; }
+		public virtual bool OnMsgPoll(object cookie) { return true; }
+		public virtual bool OnPeriodicPoll(object cookie, long lastFireTime) { return true; }
 		public virtual bool OnLoopPoll(object cookie) {
 			if (transport == null) {
 			   return true;
@@ -806,6 +811,7 @@ namespace GGPort {
 			return true;
 		}
 		
+		// TODO rename once perf tools are up
 		public struct Stats {
 			public readonly int ping;
 			public readonly int remote_frame_advantage;
@@ -852,24 +858,26 @@ namespace GGPort {
 			private static readonly int kOutOfOrderPacketPercentage = Platform.GetConfigInt("ggpo.oop.percent");
 
 			public IPEndPoint DestinationAddress { get; private set; }
-			public PeerMessage? Message { get; private set; }
 
-			private int queueID;
+			public PeerMessage Message => message ?? default;
+			private PeerMessage? message;
+			
+			private readonly int queueID;
 			private long sendTime;
 
-			public void Init(int queueID) {
+			public OutOfOrderPacket(int queueID) : this() {
 				this.queueID = queueID;
 			}
 
 			public bool RandomSet(StampedPeerMessage entry) {
 				bool shouldSet = kOutOfOrderPacketPercentage > 0
-				                 && Message == null
+				                 && message == null
 				                 && kRandom.Next(0, ushort.MaxValue) % 100 < kOutOfOrderPacketPercentage;
 
 				if (shouldSet) {
 					int delay = kRandom.Next(0, ushort.MaxValue) % (kSendLatency * 10 + 1000);
 					sendTime = Platform.GetCurrentTimeMS() + delay;
-					Message = entry.Msg;
+					message = entry.Msg;
 					DestinationAddress = entry.DestinationAddress;
 					
 					Log(queueID, $"creating rogue oop (seq: {entry.Msg.header.SequenceNumber}  delay: {delay}){Environment.NewLine}");
@@ -879,11 +887,11 @@ namespace GGPort {
 			}
 
 			public bool ShouldSendNow() {
-				return Message != null && sendTime < Platform.GetCurrentTimeMS();
+				return message != null && sendTime < Platform.GetCurrentTimeMS();
 			}
 
 			public void Clear() {
-				Message = null;
+				message = null;
 			}
 		}
 

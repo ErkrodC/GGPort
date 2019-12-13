@@ -108,9 +108,9 @@ namespace VectorWar {
 					PlayerConf playerConf = playerConfs[playerIndex];
 					
 					if (playerConf.IsLocal) {
-						players[playerIndex].Type = GGPOPlayerType.Local;
+						players[playerIndex].Type = PlayerType.Local;
 					} else {
-						players[playerIndex].Type = GGPOPlayerType.Remote;
+						players[playerIndex].Type = PlayerType.Remote;
 						players[playerIndex].EndPoint = playerConf.GetIPEndPoint();
 					}
 				}

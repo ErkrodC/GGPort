@@ -4,16 +4,16 @@ using System.Threading;
 
 namespace GGPort {
 	public class PeerToPeerBackend : Session, IPollSink, Transport.ICallbacks {
-		const int kRecommendationInterval = 240;
-		const int kDefaultDisconnectTimeout = 5000;
-		const int kDefaultDisconnectNotifyStart = 750;
+		private const int kRecommendationInterval = 240;
+		private const int kDefaultDisconnectTimeout = 5000;
+		private const int kDefaultDisconnectNotifyStart = 750;
 
 		private readonly SessionCallbacks callbacks;
 		private Poll poll;
 		private readonly Sync sync;
 		private Transport transport;
 		private Peer[] endpoints;
-		private readonly Peer[] spectators = new Peer[Types.kMaxSpectators];
+		private readonly Peer[] spectators;
 		private int numSpectators;
 		private readonly int inputSize;
 
@@ -34,6 +34,7 @@ namespace GGPort {
 			int numPlayers,
 			int inputSize
 		) {
+			spectators = new Peer[Types.kMaxSpectators];
 			this.numPlayers = numPlayers;
 			this.inputSize = inputSize;
 			localConnectStatuses = new PeerMessage.ConnectStatus[PeerMessage.kMaxPlayers];
@@ -160,7 +161,7 @@ namespace GGPort {
 
 		public override ErrorCode AddPlayer(Player player, out PlayerHandle handle) {
 			handle = new PlayerHandle(-1);
-			if (player.Type == GGPOPlayerType.Spectator) {
+			if (player.Type == PlayerType.Spectator) {
 				return AddSpectator(player.EndPoint);
 			}
 
@@ -171,13 +172,15 @@ namespace GGPort {
 			
 			handle = QueueToPlayerHandle(queue);
 
-			if (player.Type == GGPOPlayerType.Remote) {
+			if (player.Type == PlayerType.Remote) {
 				AddRemotePlayer(player.EndPoint, queue);
 			}
 			
 			return ErrorCode.Success;
 		}
 
+		// TODO refactor to take in long (8 byte bitfield) as input type, keeping size param
+		// TODO alternatively keep as byte array and do away with size param (just read byte[].Length)
 		public override ErrorCode AddLocalInput(PlayerHandle player, byte[] value, int size) {
 			GameInput input = new GameInput();
 
@@ -188,16 +191,10 @@ namespace GGPort {
 				return ErrorCode.NotSynchronized;
 			}
    
-			ErrorCode result = PlayerHandleToQueue(player, out int queue);
-			if (!Types.GGPOSucceeded(result)) {
+			ErrorCode result = TryGetPlayerQueueID(player, out int queue);
+			if (!result.Succeeded()) {
 				return result;
 			}
-
-			/*BinaryFormatter formatter = new BinaryFormatter();
-			using (MemoryStream ms = new MemoryStream(size)) {
-				formatter.Serialize(ms, value);
-				input.init(-1, ms.ToArray(), (int) ms.Length);
-			} // TODO optimize/refactor*/
 			
 			input.Init(-1, value, value.Length);
 
@@ -249,8 +246,8 @@ namespace GGPort {
 		* blob in every endpoint periodically.
 		*/
 		public override ErrorCode DisconnectPlayer(PlayerHandle player) {
-			ErrorCode result = PlayerHandleToQueue(player, out int queue);
-			if (!Types.GGPOSucceeded(result)) {
+			ErrorCode result = TryGetPlayerQueueID(player, out int queue);
+			if (!result.Succeeded()) {
 				return result;
 			}
    
@@ -259,7 +256,7 @@ namespace GGPort {
 			}
 
 			if (!endpoints[queue].IsInitialized()) {
-				int current_frame = sync.GetFrameCount();
+				int currentFrame = sync.GetFrameCount();
 				
 				// xxx: we should be tracking who the local player is, but for now assume
 				// that if the endpoint is not initialized, this must be the local player.
@@ -267,7 +264,7 @@ namespace GGPort {
 				
 				for (int i = 0; i < numPlayers; i++) {
 					if (endpoints[i].IsInitialized()) {
-						DisconnectPlayerQueue(i, current_frame);
+						DisconnectPlayerQueue(i, currentFrame);
 					}
 				}
 			} else {
@@ -278,26 +275,25 @@ namespace GGPort {
 		}
 
 		public override ErrorCode GetNetworkStats(out NetworkStats stats, PlayerHandle player) {
-			stats = default;
-
-			ErrorCode result = PlayerHandleToQueue(player, out int queue);
-			if (!Types.GGPOSucceeded(result)) {
-				return result;
+			ErrorCode result = TryGetPlayerQueueID(player, out int queue);
+			if (result.Succeeded()) {
+				stats = endpoints[queue].GetNetworkStats();
+				return ErrorCode.Success;
 			}
-			
-			endpoints[queue].GetNetworkStats(ref stats);
 
-			return ErrorCode.Success;
+			stats = default;
+			return result;
 		}
 
 		public override ErrorCode SetFrameDelay(PlayerHandle player, int frameDelay) {
-			ErrorCode result = PlayerHandleToQueue(player, out int queue);
-			if (!Types.GGPOSucceeded(result)) {
+			ErrorCode result = TryGetPlayerQueueID(player, out int queue);
+			if (!result.Succeeded()) {
 				return result;
 			}
-			
+
 			sync.SetFrameDelay(queue, frameDelay);
 			return ErrorCode.Success;
+
 		}
 
 		public override ErrorCode SetDisconnectTimeout(uint timeout) {
@@ -336,16 +332,16 @@ namespace GGPort {
 				return;
 			}
 		}
-
-		private ErrorCode PlayerHandleToQueue(PlayerHandle player, out int queue) {
+		
+		private ErrorCode TryGetPlayerQueueID(PlayerHandle player, out int queueID) {
 			int offset = player.HandleValue - 1;
-			if (offset < 0 || offset >= numPlayers) {
-				queue = -1;
-				return ErrorCode.InvalidPlayerHandle;
+			if (0 <= offset && offset < numPlayers) {
+				queueID = offset;
+				return ErrorCode.Success;
 			}
-			
-			queue = offset;
-			return ErrorCode.Success;
+
+			queueID = -1;
+			return ErrorCode.InvalidPlayerHandle;
 		}
 
 		private PlayerHandle QueueToPlayerHandle(int queue) { return new PlayerHandle(queue + 1); }
@@ -645,10 +641,9 @@ namespace GGPort {
 			}
 		}
 
-		// TODO fix param names, 4 fxns
-		public virtual bool OnHandlePoll(object TODO) { return true; }
-		public virtual bool OnMsgPoll(object TODO) { return true; }
-		public virtual bool OnPeriodicPoll(object TODO0, long TODO1) { return true; }
+		public virtual bool OnHandlePoll(object cookie) { return true; }
+		public virtual bool OnMsgPoll(object cookie) { return true; }
+		public virtual bool OnPeriodicPoll(object cookie, long lastFireTime) { return true; }
 		public virtual bool OnLoopPoll(object cookie) { return true; }
 	};
 }

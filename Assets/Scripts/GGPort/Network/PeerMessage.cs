@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 
 namespace GGPort {
-	// TODO seperate out into smaller derived classes, this used to be a union.
+	// TODO separate out into smaller derived classes, this used to be a union.
 	[Serializable, StructLayout(LayoutKind.Explicit)]
 	public struct PeerMessage {
 		public const ushort kMaxCompressedBits = 4096;
@@ -23,6 +23,19 @@ namespace GGPort {
 		[FieldOffset(5)] public QualityReply qualityReply;
 		[FieldOffset(5)] public Input input;
 		[FieldOffset(5)] public InputAck inputAck;
+		
+		public PeerMessage(MsgType t) {
+			header = new Header {
+				type = t
+			};
+
+			syncRequest = default;
+			syncReply = default;
+			qualityReport = default;
+			qualityReply = default;
+			input = t == MsgType.Input ? new Input() : default;
+			inputAck = default;
+		}
 		
 		[Serializable]
 		public struct Header {
@@ -57,19 +70,23 @@ namespace GGPort {
 		[Serializable]
 		public unsafe struct Input : ISerializable {
 			public int startFrame;
-
-			// TODO address bitfields
-			public bool disconnectRequested; //:1;
-			public int ackFrame; //:31;
-
+			public bool disconnectRequested;
+			public int ackFrame;
 			public ushort numBits;
 			public byte inputSize;  // XXX: shouldn't be in every single packet!
 			
 			private fixed bool peerDisconnectedFlags[kMaxPlayers];
 			private fixed int peerLastFrames[kMaxPlayers];
-			public fixed byte bits[kMaxCompressedBits]; /* must be last */
+			public fixed byte bits[kMaxCompressedBits]; /* must be last */ // TODO why?
 
 			public Input(SerializationInfo info, StreamingContext context) : this() {
+				startFrame = info.GetInt32(nameof(startFrame));
+				disconnectRequested = info.GetBoolean(nameof(disconnectRequested));
+				ackFrame = info.GetInt32(nameof(ackFrame));
+				numBits = info.GetUInt16(nameof(numBits));
+				inputSize = info.GetByte(nameof(inputSize));
+				
+				// deserialize connect statuses
 				bool[] peerDisconnectedFlagsArray = info.GetValue(nameof(peerDisconnectedFlags), typeof(bool[])) as bool[];
 				int[] peerLastFramesArray = info.GetValue(nameof(peerLastFrames), typeof(int[])) as int[];
 
@@ -78,16 +95,11 @@ namespace GGPort {
 					peerLastFrames[i] = peerLastFramesArray[i];
 				}
 
+				// deserialize bits
 				byte[] bitsArray = info.GetValue(nameof(bits), typeof(byte[])) as byte[];
 				for (int i = 0; i < kMaxCompressedBits; i++) {
 					bits[i] = bitsArray[i];
 				}
-
-				startFrame = info.GetInt32(nameof(startFrame));
-				disconnectRequested = info.GetBoolean(nameof(disconnectRequested));
-				ackFrame = info.GetInt32(nameof(ackFrame));
-				numBits = info.GetUInt16(nameof(numBits));
-				inputSize = info.GetByte(nameof(inputSize));
 			}
 
 			public ConnectStatus GetPeerConnectStatus(int index) {
@@ -112,25 +124,29 @@ namespace GGPort {
 			}
 
 			public void GetObjectData(SerializationInfo info, StreamingContext context) {
+				info.AddValue(nameof(startFrame), startFrame);
+				info.AddValue(nameof(disconnectRequested), disconnectRequested);
+				info.AddValue(nameof(ackFrame), ackFrame);
+				info.AddValue(nameof(numBits), numBits);
+				info.AddValue(nameof(inputSize), inputSize);
+				
+				// serialize connect statuses
 				bool[] peerDisconnectedFlagsArray = new bool[kMaxPlayers];
 				int[] peerLastFramesArray = new int[kMaxPlayers];
 				for (int i = 0; i < kMaxPlayers; i++) {
 					peerDisconnectedFlagsArray[i] = peerDisconnectedFlags[i];
 					peerLastFramesArray[i] = peerLastFrames[i];
 				}
-
+				
+				info.AddValue(nameof(peerDisconnectedFlags), peerDisconnectedFlagsArray, typeof(bool[]));
+				info.AddValue(nameof(peerLastFramesArray), peerLastFramesArray, typeof(int[]));
+				
+				// serialize bits
 				byte[] bitsArray = new byte[kMaxCompressedBits];
 				for (int i = 0; i < kMaxCompressedBits; i++) {
 					bitsArray[i] = bits[i];
 				}
 				
-				info.AddValue(nameof(startFrame), startFrame);
-				info.AddValue(nameof(disconnectRequested), disconnectRequested);
-				info.AddValue(nameof(ackFrame), ackFrame);
-				info.AddValue(nameof(numBits), numBits);
-				info.AddValue(nameof(inputSize), inputSize);
-				info.AddValue(nameof(peerDisconnectedFlags), peerDisconnectedFlagsArray, typeof(bool[]));
-				info.AddValue(nameof(peerLastFramesArray), peerLastFramesArray, typeof(int[]));
 				info.AddValue(nameof(bits), bitsArray, typeof(byte[]));
 			}
 		}
@@ -139,19 +155,6 @@ namespace GGPort {
 		public struct InputAck {
 			// TODO address bitfields
 			public int ackFrame; //:31;
-		}
-
-		public PeerMessage(MsgType t) {
-			header = new Header {
-				type = t
-			};
-
-			syncRequest = default;
-			syncReply = default;
-			qualityReport = default;
-			qualityReply = default;
-			input = t == MsgType.Input ? new Input() : default;
-			inputAck = default;
 		}
 
 		public enum MsgType : byte {
@@ -165,11 +168,10 @@ namespace GGPort {
 			InputAck      = 7,
 		};
 		
-		// TODO address bitfields
 		[Serializable]
 		public struct ConnectStatus {
-			public bool IsDisconnected;//:1;
-			public int LastFrame;//:31;
+			public bool IsDisconnected;
+			public int LastFrame;
 		};
 	};
 }
