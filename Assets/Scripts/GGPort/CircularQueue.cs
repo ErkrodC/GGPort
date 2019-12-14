@@ -82,8 +82,8 @@ namespace GGPort {
 				get {
 					try {
 						return queue[position];
-					} catch (IndexOutOfRangeException) {
-						Platform.AssertFailed("IndexOutOfRangeException");
+					} catch (Exception exception) {
+						Platform.AssertFailed(exception);
 						throw;
 					}
 				}

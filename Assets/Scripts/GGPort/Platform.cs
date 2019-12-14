@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using Debug = UnityEngine.Debug;
 
 namespace GGPort {
 	public static class Platform {
@@ -24,8 +25,14 @@ namespace GGPort {
 		};
 
 		public static int GetProcessID() { return Process.GetCurrentProcess().Id; }
-		
-		public static void Assert(bool expression, string msg = "Assertion Failed.", [CallerFilePath] string callerFilePath = "", [CallerMemberName] string callerName = "", [CallerLineNumber] int callerLineNumber = -1) {
+
+		public static void Assert(
+			bool expression,
+			string msg = "Assertion Failed.",
+			[CallerFilePath] string callerFilePath = "",
+			[CallerMemberName] string callerName = "",
+			[CallerLineNumber] int callerLineNumber = -1
+		) {
 			do {
 				if (!(expression)) {
 					AssertFailedInternal(msg, callerFilePath, callerName, callerLineNumber);
@@ -33,16 +40,45 @@ namespace GGPort {
 			} while (false);
 		}
 
-		public static void AssertFailed(string msg, [CallerFilePath] string callerFilePath = "", [CallerMemberName] string callerName = "", [CallerLineNumber] int callerLineNumber = -1) {
-			AssertFailedInternal(msg, callerFilePath, callerName, callerLineNumber);
+		public static void AssertFailed(
+			Exception exception,
+			[CallerFilePath] string callerFilePath = "",
+			[CallerMemberName] string callerName = "",
+			[CallerLineNumber] int callerLineNumber = -1
+		) {
+			Debug.LogException(exception);
+#if !UNITY_EDITOR
+			AssertFailedInternal(exception.ToString(), callerFilePath, callerName, callerLineNumber);
+#else
+			Debugger.Break();
+#endif
 		}
 
-		private static void AssertFailedInternal(string msg, string callerFilePath, string callerName, int callerLineNumber) {
+		public static void AssertFailed(
+			string msg,
+			[CallerFilePath] string callerFilePath = "",
+			[CallerMemberName] string callerName = "",
+			[CallerLineNumber] int callerLineNumber = -1
+		) {
+			Debug.LogError(msg);
+#if !UNITY_EDITOR
+			AssertFailedInternal(msg, callerFilePath, callerName, callerLineNumber);
+#else
+			Debugger.Break();
+#endif
+		}
+
+		private static void AssertFailedInternal(
+			string msg,
+			string callerFilePath,
+			string callerName,
+			int callerLineNumber
+		) {
 			if (!string.IsNullOrEmpty(callerFilePath)) {
 				string[] callerFilePathSplit = callerFilePath.Split('/', '\\');
 				string fileName = callerFilePathSplit[callerFilePathSplit.Length - 1];
-				msg += $"{Environment.NewLine}\t\t{(callerLineNumber == -1 ? "In ": "@ ")} {fileName}";
-				
+				msg += $"{Environment.NewLine}\t\t{(callerLineNumber == -1 ? "In " : "@ ")} {fileName}";
+
 				if (callerLineNumber != -1) {
 					msg += $":{callerLineNumber}";
 				}
@@ -51,10 +87,9 @@ namespace GGPort {
 					msg += $",{Environment.NewLine}\t\tMethod: {callerName}";
 				}
 			}
-			
+
 			LogUtil.Log($"{Environment.NewLine}{msg}");
 			Debugger.Break();
-			Environment.Exit(0);
 		}
 
 		public static long GetCurrentTimeMS() {

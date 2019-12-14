@@ -39,7 +39,7 @@ namespace VectorWar {
 			KeyCode.F10,
 			KeyCode.F12
 		};
-		
+
 		private void Awake() {
 			titleText.text = $"(pid:{Platform.GetProcessID()} GGPort SDK Sample: Vector War)";
 			started = false;

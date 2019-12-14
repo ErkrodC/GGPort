@@ -340,7 +340,7 @@ namespace GGPort {
 		// TODO revalidate these log wrappers as they may add some info to the string passed to global log
 		private void Log(string msg) => Log(queueID, msg);
 		private static void Log(int queueID, string msg) {
-			string prefix = $"{nameof(Peer)} {queueID} ";
+			string prefix = $"{nameof(Peer)} {queueID} | ";
 			LogUtil.Log(prefix + msg);
 		}
 

@@ -26,7 +26,7 @@ namespace GGPort {
 		private Poll poll;
 
 		protected static void Log(string msg) {
-			
+			LogUtil.Log($"{nameof(Transport)} | {msg}");
 		}
 
 		public Transport() {
@@ -43,7 +43,6 @@ namespace GGPort {
 
 		public void Init(ushort port, Poll poll, ICallbacks callbacks) {
 			this.callbacks = callbacks;
-
 			this.poll = poll;
 			this.poll.RegisterLoop(this);
 
@@ -57,7 +56,7 @@ namespace GGPort {
 				 sentBytes = socket.SendTo(buffer, len, flags, dst);
 				Log($"sent packet length {len} to {dst.Address}:{dst.Port} (ret:{sentBytes}).{Environment.NewLine}");
 			} catch (Exception exception) {
-				Platform.AssertFailed(exception.ToString()); // TODO do .ToString() for exceptions elsewhere
+				Platform.AssertFailed(exception); // TODO do .ToString() for exceptions elsewhere
 				throw;
 			}
 
@@ -89,33 +88,29 @@ namespace GGPort {
 
 					// TODO: handle len == 0... indicates a disconnect.
 				} catch (Exception exception) {
-					Log($"{exception.Message}{Environment.NewLine}");
-					Platform.AssertFailed(exception.ToString());
+					Platform.AssertFailed(exception);
 					break;
 				} 
 			}
 			return true;
 		}
 
-		public static Socket CreateSocket(ushort portToBindTo, int retries) {
-			Socket s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-			s.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, 1);
-			//s.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.DontLinger, true); // TODO why doesn't this work?
-
-			// non-blocking...
-			s.Blocking = false;
+		private static Socket CreateSocket(ushort portToBindTo, int retries) {
+			Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+			socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, 1);
+			socket.Blocking = false;
 
 			for (ushort port = portToBindTo; port <= portToBindTo + retries; port++) {
 				try {
-					s.Bind(new IPEndPoint(IPAddress.Any, port));
+					socket.Bind(new IPEndPoint(IPAddress.Any, port));
 					Log($"Udp bound to port: {port}.{Environment.NewLine}");
-					return s;
+					return socket;
 				} catch (Exception exception) {
-					Platform.AssertFailed(exception.ToString());
+					Platform.AssertFailed(exception.ToString()); // TODO this kills retry attempts
 				}
 			}
 			
-			s.Close();
+			socket.Close();
 			return null;
 		}
 		
