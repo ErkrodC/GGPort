@@ -139,7 +139,7 @@ namespace GGPort {
 				}
 				
 				info.AddValue(nameof(peerDisconnectedFlags), peerDisconnectedFlagsArray, typeof(bool[]));
-				info.AddValue(nameof(peerLastFramesArray), peerLastFramesArray, typeof(int[]));
+				info.AddValue(nameof(peerLastFrames), peerLastFramesArray, typeof(int[]));
 				
 				// serialize bits
 				byte[] bitsArray = new byte[kMaxCompressedBits];

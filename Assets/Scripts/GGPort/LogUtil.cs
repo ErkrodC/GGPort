@@ -6,7 +6,7 @@ namespace GGPort {
 	public static class LogUtil {
 		public static event SessionCallbacks.LogDelegate LogCallback;
 
-		private static FileStream logfile;
+		private static FileStream logFileStream;
 		private static long start;
 
 		public static void Log(string msg) {
@@ -17,13 +17,17 @@ namespace GGPort {
 				return;
 			}
 			
-			if (logfile == null) {
-				string fileName = $"log-{Platform.GetProcessID()}.log";
+			if (logFileStream == null) {
+				string filePath = $"log-{Platform.GetProcessID()}.log";
 
-				logfile = File.OpenWrite(fileName);
+				FileMode fileMode = File.Exists(filePath)
+					? FileMode.Append
+					: FileMode.OpenOrCreate;
+				
+				logFileStream = File.Open(filePath, fileMode);
 			}
 			
-			LogToFile(ref logfile, msg);
+			LogToFile(ref logFileStream, msg);
 #endif
 		}
 

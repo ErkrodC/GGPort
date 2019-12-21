@@ -25,18 +25,11 @@ namespace GGPort {
 		private ICallbacks callbacks;
 		private Poll poll;
 
-		protected static void Log(string msg) {
+		private static void Log(string msg) {
 			LogUtil.Log($"{nameof(Transport)} | {msg}");
 		}
 
-		public Transport() {
-			socket = null;
-			callbacks = null;
-		}
-
 		~Transport() {
-			if (socket == null) { return; }
-
 			socket.Close();
 			socket = null;
 		}
@@ -53,7 +46,7 @@ namespace GGPort {
 		public int SendTo(byte[] buffer, int len, SocketFlags flags, IPEndPoint dst) {
 			int sentBytes = 0;
 			try {
-				 sentBytes = socket.SendTo(buffer, len, flags, dst);
+				sentBytes = socket.SendTo(buffer, len, flags, dst);
 				Log($"sent packet length {len} to {dst.Address}:{dst.Port} (ret:{sentBytes}).{Environment.NewLine}");
 			} catch (Exception exception) {
 				Platform.AssertFailed(exception); // TODO do .ToString() for exceptions elsewhere
@@ -63,27 +56,25 @@ namespace GGPort {
 			return sentBytes;
 		}
 
-		public virtual bool OnLoopPoll(object cookie) {
+		public bool OnLoopPoll(object cookie) {
 			byte[] receiveBuffer = new byte[kMaxUDPPacketSize];
 
-			EndPoint fromEndPoint = new IPEndPoint(IPAddress.Any, 0);
+			EndPoint remoteEP = new IPEndPoint(IPAddress.Any, 0);
 			
 			for (;;) {
 				try {
-					if (socket.Available <= 0) {
-						break;
-					}
-					int len = socket.ReceiveFrom(receiveBuffer, kMaxUDPPacketSize, SocketFlags.None, ref fromEndPoint);
+					if (socket.Available == 0) { break; }
+					int len = socket.ReceiveFrom(receiveBuffer, kMaxUDPPacketSize, SocketFlags.None, ref remoteEP);
 
-					if (fromEndPoint is IPEndPoint fromIPEndPoint) {
-						Log($"recvfrom returned (len:{len}  from:{fromIPEndPoint.Address}:{fromIPEndPoint.Port}).{Environment.NewLine}");
+					if (remoteEP is IPEndPoint remoteIP) {
+						Log($"recvfrom returned (len:{len}  from:{remoteIP.Address}:{remoteIP.Port}).{Environment.NewLine}");
 						IFormatter br = new BinaryFormatter();
 						using (MemoryStream ms = new MemoryStream(receiveBuffer)) {
 							PeerMessage msg = (PeerMessage) br.Deserialize(ms); // TODO deserialization probably doesn't work? why does it work for syncing but not input?
-							callbacks.OnMsg(fromIPEndPoint, msg);
+							callbacks.OnMsg(remoteIP, msg);
 						} // TODO optimize refactor
 					} else {
-						Platform.AssertFailed($"Expecting endpoint of type {nameof(IPEndPoint)}, but was given {fromEndPoint.GetType()}.");
+						Platform.AssertFailed($"Expecting endpoint of type {nameof(IPEndPoint)}, but was given {remoteEP.GetType()}.");
 					}
 
 					// TODO: handle len == 0... indicates a disconnect.
@@ -106,7 +97,7 @@ namespace GGPort {
 					Log($"Udp bound to port: {port}.{Environment.NewLine}");
 					return socket;
 				} catch (Exception exception) {
-					Platform.AssertFailed(exception.ToString()); // TODO this kills retry attempts
+					Platform.AssertFailed(exception); // TODO this kills retry attempts
 				}
 			}
 			
@@ -114,9 +105,9 @@ namespace GGPort {
 			return null;
 		}
 		
-		public virtual bool OnHandlePoll(object cookie) { return true; }
-		public virtual bool OnMsgPoll(object cookie) { return true; }
-		public virtual bool OnPeriodicPoll(object cookie, long lastFireTime) { return true; }
+		public bool OnHandlePoll(object cookie) { return true; }
+		public bool OnMsgPoll(object cookie) { return true; }
+		public bool OnPeriodicPoll(object cookie, long lastFireTime) { return true; }
 		
 		// TODO rename after perf tools up
 		public struct Stats {
