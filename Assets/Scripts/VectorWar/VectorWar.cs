@@ -126,7 +126,7 @@ namespace VectorWar {
 
 			ErrorCode result = session.DisconnectPlayer(kNonGameState.Players[player].Handle);
 
-			string logMsg = result.Succeeded()
+			string logMsg = result.IsSuccess()
 				? $"Disconnected player {player}.{Environment.NewLine}"
 				: $"Error while disconnecting player (err:{result}).{Environment.NewLine}";
 
@@ -224,9 +224,9 @@ namespace VectorWar {
 			// synchronize these inputs with ggpo.  If we have enough input to proceed
 			// ggpo will modify the input list with the correct inputs to use and
 			// return 1.
-			if (result.Succeeded()) {
+			if (result.IsSuccess()) {
 				result = session.SynchronizeInput(inputs, sizeof(int) * GameState.kMaxShips, ref disconnectFlags);
-				if (result.Succeeded()) {
+				if (result.IsSuccess()) {
 					// inputs[0] and inputs[1] contain the inputs for p1 and p2.  Advance
 					// the game by 1 frame using those inputs.
 					AdvanceFrame(inputs, disconnectFlags);

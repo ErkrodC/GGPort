@@ -10,7 +10,7 @@ namespace GGPort {
 		public const int kMaxSpectators = 32;
 		public const int kSpectatorInputInterval = 4;
 
-		public static bool Succeeded(this ErrorCode result) {
+		public static bool IsSuccess(this ErrorCode result) {
 			return result == ErrorCode.Success;
 		}
 	}

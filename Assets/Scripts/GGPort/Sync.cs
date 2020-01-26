@@ -211,8 +211,8 @@ namespace GGPort {
 				);
 			}
 		};
-		
-		protected struct SavedState {
+
+		private struct SavedState {
 			public readonly SavedFrame[] Frames;
 			public int Head { get; set; }
 
@@ -224,6 +224,8 @@ namespace GGPort {
 
 		public void LoadFrame(int frame) {
 			// find the frame in question
+			LogUtil.Log($"Try Load Frame {frame}.");
+			
 			if (frame == frameCount) {
 				LogUtil.Log($"Skipping NOP.{Environment.NewLine}");
 				return;
@@ -261,6 +263,7 @@ namespace GGPort {
 			
 			savedFrame.Frame = frameCount;
 			callbacks.SaveGameState(out savedFrame.GameState, out savedFrame.Checksum, savedFrame.Frame);
+			savedState.Frames[savedState.Head] = savedFrame;
 
 			LogUtil.Log($"=== Saved frame info {savedFrame.Frame} (checksum: {savedFrame.Checksum:x8}).{Environment.NewLine}");
 			savedState.Head = (savedState.Head + 1) % savedState.Frames.Length;

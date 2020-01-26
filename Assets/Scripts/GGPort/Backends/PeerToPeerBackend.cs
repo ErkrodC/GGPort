@@ -27,13 +27,7 @@ namespace GGPort {
 
 		private readonly PeerMessage.ConnectStatus[] localConnectStatuses;
 
-		public PeerToPeerBackend(
-			SessionCallbacks cb,
-			string gameName,
-			ushort localPort,
-			int numPlayers,
-			int inputSize
-		) {
+		public PeerToPeerBackend(SessionCallbacks cb, string gameName, ushort localPort, int numPlayers, int inputSize) {
 			spectators = new Peer[Types.kMaxSpectators];
 			this.numPlayers = numPlayers;
 			this.inputSize = inputSize;
@@ -54,7 +48,7 @@ namespace GGPort {
 				numPlayers,
 				inputSize
 			);
-			
+
 			sync.Init(config);
 
 			// Initialize the UDP port
@@ -70,7 +64,7 @@ namespace GGPort {
 			for (int i = 0; i < localConnectStatuses.Length; i++) {
 				localConnectStatuses[i] = default;
 			}
-			
+
 			for (int i = 0; i < localConnectStatuses.Length; i++) {
 				localConnectStatuses[i].LastFrame = -1;
 			}
@@ -87,75 +81,76 @@ namespace GGPort {
 
 		public override unsafe ErrorCode Idle(int timeout) {
 			if (!sync.InRollback()) {
-			   poll.Pump(0);
+				poll.Pump(0);
 
-			   PollUdpProtocolEvents();
+				PollUdpProtocolEvents();
 
-			   if (!synchronizing) {
-				   sync.CheckSimulation(timeout);
+				if (!synchronizing) {
+					sync.CheckSimulation(timeout);
 
-				   // notify all of our endpoints of their local frame number for their
-				   // next connection quality report
-				   int currentFrame = sync.GetFrameCount();
-				   for (int i = 0; i < numPlayers; i++) {
-					   endpoints[i].SetLocalFrameNumber(currentFrame);
-				   }
-				   
-				   int totalMinConfirmed = numPlayers <= 2
-					   ? Poll2Players(currentFrame)
-					   : PollNPlayers();
+					// notify all of our endpoints of their local frame number for their
+					// next connection quality report
+					int currentFrame = sync.GetFrameCount();
+					for (int i = 0; i < numPlayers; i++) {
+						endpoints[i].SetLocalFrameNumber(currentFrame);
+					}
 
-				   LogUtil.Log($"last confirmed frame in p2p backend is {totalMinConfirmed}.{Environment.NewLine}");
-				   if (totalMinConfirmed >= 0) {
-					   Platform.Assert(totalMinConfirmed != int.MaxValue);
-					   
-					   if (numSpectators > 0) {
-						   while (nextSpectatorFrame <= totalMinConfirmed) {
-							   LogUtil.Log($"pushing frame {nextSpectatorFrame} to spectators.{Environment.NewLine}");
+					int totalMinConfirmed = numPlayers <= 2
+						? Poll2Players(currentFrame)
+						: PollNPlayers();
 
-							   GameInput input = new GameInput {
-								   Frame = nextSpectatorFrame,
-								   Size = inputSize * numPlayers
-							   };
-							   
-							   sync.GetConfirmedInputs(input.Bits, inputSize * numPlayers, nextSpectatorFrame);
-							   for (int i = 0; i < numSpectators; i++) {
-								   spectators[i].SendInput(input);
-							   }
-							   nextSpectatorFrame++;
-						   }
-					   }
+					LogUtil.Log($"last confirmed frame in p2p backend is {totalMinConfirmed}.{Environment.NewLine}");
+					if (totalMinConfirmed >= 0) {
+						Platform.Assert(totalMinConfirmed != int.MaxValue);
 
-					   LogUtil.Log($"setting confirmed frame in sync to {totalMinConfirmed}.{Environment.NewLine}");
-					   sync.SetLastConfirmedFrame(totalMinConfirmed);
-				   }
+						if (numSpectators > 0) {
+							while (nextSpectatorFrame <= totalMinConfirmed) {
+								LogUtil.Log($"pushing frame {nextSpectatorFrame} to spectators.{Environment.NewLine}");
 
-				   // send timeSync notifications if now is the proper time
-				   if (currentFrame > nextRecommendedSleep) {
-					   int interval = 0;
-					   for (int i = 0; i < numPlayers; i++) {
-						   interval = Math.Max(interval, endpoints[i].RecommendFrameDelay());
-					   }
+								GameInput input = new GameInput {
+									Frame = nextSpectatorFrame,
+									Size = inputSize * numPlayers
+								};
 
-					   if (interval > 0) {
-						   Event info = new Event {
-							   code = EventCode.TimeSync,
-							   timeSync = {
-								   framesAhead = interval
-							   }
-						   };
-						   callbacks.OnEvent(info);
-						   nextRecommendedSleep = currentFrame + kRecommendationInterval;
-					   }
-				   }
-				   
-				   // XXX: this is obviously a farce...
-				   if (timeout != 0) {
-					   Thread.Sleep(1);
-				   }
-			   }
+								sync.GetConfirmedInputs(input.Bits, inputSize * numPlayers, nextSpectatorFrame);
+								for (int i = 0; i < numSpectators; i++) {
+									spectators[i].SendInput(input);
+								}
+
+								nextSpectatorFrame++;
+							}
+						}
+
+						LogUtil.Log($"setting confirmed frame in sync to {totalMinConfirmed}.{Environment.NewLine}");
+						sync.SetLastConfirmedFrame(totalMinConfirmed);
+					}
+
+					// send timeSync notifications if now is the proper time
+					if (currentFrame > nextRecommendedSleep) {
+						int interval = 0;
+						for (int i = 0; i < numPlayers; i++) {
+							interval = Math.Max(interval, endpoints[i].RecommendFrameDelay());
+						}
+
+						if (interval > 0) {
+							Event info = new Event {
+								code = EventCode.TimeSync,
+								timeSync = {
+									framesAhead = interval
+								}
+							};
+							callbacks.OnEvent(info);
+							nextRecommendedSleep = currentFrame + kRecommendationInterval;
+						}
+					}
+
+					// XXX: this is obviously a farce...
+					if (timeout != 0) {
+						Thread.Sleep(1);
+					}
+				}
 			}
-			
+
 			return ErrorCode.Success;
 		}
 
@@ -169,13 +164,13 @@ namespace GGPort {
 			if (player.PlayerNum < 1 || player.PlayerNum > numPlayers) {
 				return ErrorCode.PlayerOutOfRange;
 			}
-			
+
 			handle = QueueToPlayerHandle(queue);
 
 			if (player.Type == PlayerType.Remote) {
 				AddRemotePlayer(player.EndPoint, queue);
 			}
-			
+
 			return ErrorCode.Success;
 		}
 
@@ -187,27 +182,32 @@ namespace GGPort {
 			if (sync.InRollback()) {
 				return ErrorCode.InRollback;
 			}
+
 			if (synchronizing) {
 				return ErrorCode.NotSynchronized;
 			}
-   
+
 			ErrorCode result = TryGetPlayerQueueID(player, out int queue);
-			if (!result.Succeeded()) {
+			if (!result.IsSuccess()) {
 				return result;
 			}
-			
+
 			input.Init(-1, value, value.Length);
 
-			// Feed the input for the current frame into the synchronzation layer.
+			// Feed the input for the current frame into the synchronization layer.
 			if (!sync.AddLocalInput(queue, ref input)) {
 				return ErrorCode.PredictionThreshold;
 			}
 
-			if (!input.IsNull()) { // xxx: <- comment why this is the case
+			// xxx: <- comment why this is the case
+			if (!input.IsNull()) {
 				// Update the local connect status state to indicate that we've got a
 				// confirmed local frame for this player.  this must come first so it
 				// gets incorporated into the next packet we send.
-				LogUtil.Log($"setting local connect status for local queue {queue} to {input.Frame}{Environment.NewLine}");
+				LogUtil.Log(
+					$"setting local connect status for local queue {queue} to {input.Frame}{Environment.NewLine}"
+				);
+				
 				localConnectStatuses[queue].LastFrame = input.Frame;
 
 				// Send the input to all the remote players.
@@ -226,7 +226,7 @@ namespace GGPort {
 			if (synchronizing) {
 				return ErrorCode.NotSynchronized;
 			}
-			
+
 			disconnectFlags = sync.SynchronizeInputs(values, size);
 			return ErrorCode.Success;
 		}
@@ -240,43 +240,48 @@ namespace GGPort {
 			return ErrorCode.Success;
 		}
 
-		/*
-		* Called only as the result of a local decision to disconnect.  The remote
-		* decisions to disconnect are a result of us parsing the peer_connect_settings
-		* blob in every endpoint periodically.
-		*/
+		// Called only as the result of a local decision to disconnect.  The remote
+		// decisions to disconnect are a result of us parsing the peer_connect_settings
+		// blob in every endpoint periodically.
 		public override ErrorCode DisconnectPlayer(PlayerHandle player) {
 			ErrorCode result = TryGetPlayerQueueID(player, out int queue);
-			if (!result.Succeeded()) {
+			if (!result.IsSuccess()) {
 				return result;
 			}
-   
+
 			if (localConnectStatuses[queue].IsDisconnected) {
 				return ErrorCode.PlayerDisconnected;
 			}
 
 			if (!endpoints[queue].IsInitialized()) {
 				int currentFrame = sync.GetFrameCount();
-				
+
 				// xxx: we should be tracking who the local player is, but for now assume
 				// that if the endpoint is not initialized, this must be the local player.
-				LogUtil.Log($"Disconnecting local player {queue} at frame {localConnectStatuses[queue].LastFrame} by user request.{Environment.NewLine}");
-				
+				LogUtil.Log(
+					$"Disconnecting local player {queue} at frame {localConnectStatuses[queue].LastFrame} "
+					+ $"by user request.{Environment.NewLine}"
+				);
+
 				for (int i = 0; i < numPlayers; i++) {
 					if (endpoints[i].IsInitialized()) {
 						DisconnectPlayerQueue(i, currentFrame);
 					}
 				}
 			} else {
-				LogUtil.Log($"Disconnecting queue {queue} at frame {localConnectStatuses[queue].LastFrame} by user request.{Environment.NewLine}");
+				LogUtil.Log(
+					$"Disconnecting queue {queue} at frame {localConnectStatuses[queue].LastFrame} "
+					+ $"by user request.{Environment.NewLine}"
+				);
 				DisconnectPlayerQueue(queue, localConnectStatuses[queue].LastFrame);
 			}
+
 			return ErrorCode.Success;
 		}
 
 		public override ErrorCode GetNetworkStats(out NetworkStats stats, PlayerHandle player) {
 			ErrorCode result = TryGetPlayerQueueID(player, out int queue);
-			if (result.Succeeded()) {
+			if (result.IsSuccess()) {
 				stats = endpoints[queue].GetNetworkStats();
 				return ErrorCode.Success;
 			}
@@ -287,13 +292,12 @@ namespace GGPort {
 
 		public override ErrorCode SetFrameDelay(PlayerHandle player, int frameDelay) {
 			ErrorCode result = TryGetPlayerQueueID(player, out int queue);
-			if (!result.Succeeded()) {
+			if (!result.IsSuccess()) {
 				return result;
 			}
 
 			sync.SetFrameDelay(queue, frameDelay);
 			return ErrorCode.Success;
-
 		}
 
 		public override ErrorCode SetDisconnectTimeout(uint timeout) {
@@ -303,7 +307,7 @@ namespace GGPort {
 					endpoints[i].SetDisconnectTimeout(disconnectTimeout);
 				}
 			}
-			
+
 			return ErrorCode.Success;
 		}
 
@@ -314,6 +318,7 @@ namespace GGPort {
 					endpoints[i].SetDisconnectNotifyStart(disconnectNotifyStart);
 				}
 			}
+
 			return ErrorCode.Success;
 		}
 
@@ -324,7 +329,7 @@ namespace GGPort {
 				endpoints[i].OnMsg(msg);
 				return;
 			}
-			
+
 			for (int i = 0; i < numSpectators; i++) {
 				if (!spectators[i].HandlesMsg(from)) { continue; }
 
@@ -332,7 +337,7 @@ namespace GGPort {
 				return;
 			}
 		}
-		
+
 		private ErrorCode TryGetPlayerQueueID(PlayerHandle player, out int queueID) {
 			int offset = player.HandleValue - 1;
 			if (0 <= offset && offset < numPlayers) {
@@ -347,21 +352,29 @@ namespace GGPort {
 		private PlayerHandle QueueToPlayerHandle(int queue) { return new PlayerHandle(queue + 1); }
 
 		private PlayerHandle QueueToSpectatorHandle(int queue) {
+			// out of range of the player array, basically
 			return new PlayerHandle(queue + 1000);
-		} /* out of range of the player array, basically */
+		}
 
 		private void DisconnectPlayerQueue(int queue, int syncTo) {
 			int frameCount = sync.GetFrameCount();
 
 			endpoints[queue].Disconnect();
 
-			LogUtil.Log($"Changing queue {queue} local connect status for last frame from {localConnectStatuses[queue].LastFrame} to {syncTo} on disconnect request (current: {frameCount}).{Environment.NewLine}");
+			LogUtil.Log(
+				$"Changing queue {queue} local connect status for last frame "
+				+ $"from {localConnectStatuses[queue].LastFrame} to {syncTo} on disconnect request "
+				+ $"(current: {frameCount}).{Environment.NewLine}"
+			);
 
 			localConnectStatuses[queue].IsDisconnected = true;
 			localConnectStatuses[queue].LastFrame = syncTo;
 
 			if (syncTo < frameCount) {
-				LogUtil.Log($"adjusting simulation to account for the fact that {queue} disconnected @ {syncTo}.{Environment.NewLine}");
+				LogUtil.Log(
+					$"adjusting simulation to account for the fact that {queue} "
+					+ $"disconnected @ {syncTo}.{Environment.NewLine}"
+				);
 				sync.AdjustSimulation(syncTo);
 				LogUtil.Log($"finished adjusting simulation.{Environment.NewLine}");
 			}
@@ -372,7 +385,7 @@ namespace GGPort {
 					player = QueueToPlayerHandle(queue)
 				}
 			};
-			
+
 			callbacks.OnEvent(info);
 
 			CheckInitialSync();
@@ -390,7 +403,7 @@ namespace GGPort {
 					OnUdpProtocolPeerEvent(ref evt, i);
 				}
 			}
-			
+
 			for (int i = 0; i < numSpectators; i++) {
 				while (spectators[i].GetEvent(out Peer.Event evt)) {
 					OnUdpProtocolSpectatorEvent(ref evt, i);
@@ -398,17 +411,19 @@ namespace GGPort {
 			}
 		}
 
-		protected void CheckInitialSync() {
+		private void CheckInitialSync() {
 			if (synchronizing) {
 				// Check to see if everyone is now synchronized.  If so,
 				// go ahead and tell the client that we're ok to accept input.
 				for (int i = 0; i < numPlayers; i++) {
 					// xxx: IsInitialized() must go... we're actually using it as a proxy for "represents the local player"
-					if (endpoints[i].IsInitialized() && !endpoints[i].IsSynchronized() && !localConnectStatuses[i].IsDisconnected) {
+					if (endpoints[i].IsInitialized()
+					    && !endpoints[i].IsSynchronized()
+					    && !localConnectStatuses[i].IsDisconnected) {
 						return;
 					}
 				}
-				
+
 				for (int i = 0; i < numSpectators; i++) {
 					if (spectators[i].IsInitialized() && !spectators[i].IsSynchronized()) {
 						return;
@@ -418,38 +433,41 @@ namespace GGPort {
 				Event info = new Event {
 					code = EventCode.Running
 				};
-				
+
 				callbacks.OnEvent(info);
 				synchronizing = false;
 			}
 		}
 
-		protected int Poll2Players(int current_frame) {
-			int i;
-
+		private int Poll2Players(int currentFrame) {
 			// discard confirmed frames as appropriate
-			int total_min_confirmed = int.MaxValue;
-			for (i = 0; i < numPlayers; i++) {
-				bool queue_connected = true;
-				
-				if (endpoints[i].IsRunning()) {
-					queue_connected = endpoints[i].GetPeerConnectStatus(i, out int ignore);
-				}
-				
-				if (!localConnectStatuses[i].IsDisconnected) {
-					total_min_confirmed = Math.Min(localConnectStatuses[i].LastFrame, total_min_confirmed);
+			int totalMinConfirmed = int.MaxValue;
+			for (int peer = 0; peer < numPlayers; peer++) {
+				bool isPeerConnected = true;
+
+				if (endpoints[peer].IsRunning()) {
+					isPeerConnected = endpoints[peer].GetPeerConnectStatus(peer, out int ignore);
 				}
 
-				LogUtil.Log($"  local endp: connected = {!localConnectStatuses[i].IsDisconnected}, last_received = {localConnectStatuses[i].LastFrame}, total_min_confirmed = {total_min_confirmed}.{Environment.NewLine}");
-				if (!queue_connected && !localConnectStatuses[i].IsDisconnected) {
-					LogUtil.Log($"disconnecting i {i} by remote request.{Environment.NewLine}");
-					DisconnectPlayerQueue(i, total_min_confirmed);
+				if (!localConnectStatuses[peer].IsDisconnected) {
+					totalMinConfirmed = Math.Min(localConnectStatuses[peer].LastFrame, totalMinConfirmed);
 				}
 
-				LogUtil.Log($"  total_min_confirmed = {total_min_confirmed}.{Environment.NewLine}");
+				LogUtil.Log(
+					$"  local endp: connected = {!localConnectStatuses[peer].IsDisconnected}, "
+					+ $"last_received = {localConnectStatuses[peer].LastFrame}, "
+					+ $"total_min_confirmed = {totalMinConfirmed}.{Environment.NewLine}"
+				);
+
+				if (!isPeerConnected && !localConnectStatuses[peer].IsDisconnected) {
+					LogUtil.Log($"disconnecting i {peer} by remote request.{Environment.NewLine}");
+					DisconnectPlayerQueue(peer, totalMinConfirmed);
+				}
+
+				LogUtil.Log($"  total_min_confirmed = {totalMinConfirmed}.{Environment.NewLine}");
 			}
-			
-			return total_min_confirmed;
+
+			return totalMinConfirmed;
 		}
 
 		private int PollNPlayers() {
@@ -471,18 +489,26 @@ namespace GGPort {
 
 						queueConnected = queueConnected && connected;
 						queueMinConfirmed = Math.Min(lastReceivedFrameNumber, queueMinConfirmed);
-						LogUtil.Log($"  endpoint {i}: connected = {connected}, {nameof(lastReceivedFrameNumber)} = {lastReceivedFrameNumber}, {nameof(queueMinConfirmed)} = {queueMinConfirmed}.{Environment.NewLine}");
+						LogUtil.Log(
+							$"  endpoint {i}: connected = {connected}, "
+							+ $"{nameof(lastReceivedFrameNumber)} = {lastReceivedFrameNumber}, "
+							+ $"{nameof(queueMinConfirmed)} = {queueMinConfirmed}.{Environment.NewLine}"
+						);
 					} else {
 						LogUtil.Log($"  endpoint {i}: ignoring... not running.{Environment.NewLine}");
 					}
 				}
-				
+
 				// merge in our local status only if we're still connected!
 				if (!localConnectStatuses[queue].IsDisconnected) {
 					queueMinConfirmed = Math.Min(localConnectStatuses[queue].LastFrame, queueMinConfirmed);
 				}
 
-				LogUtil.Log($"  local endpoint: connected = {!localConnectStatuses[queue].IsDisconnected}, {nameof(PeerMessage.ConnectStatus.LastFrame)} = {localConnectStatuses[queue].LastFrame}, {nameof(queueMinConfirmed)} = {queueMinConfirmed}.{Environment.NewLine}");
+				LogUtil.Log(
+					$"  local endpoint: connected = {!localConnectStatuses[queue].IsDisconnected}, "
+					+ $"{nameof(PeerMessage.ConnectStatus.LastFrame)} = {localConnectStatuses[queue].LastFrame}, "
+					+ $"{nameof(queueMinConfirmed)} = {queueMinConfirmed}.{Environment.NewLine}"
+				);
 
 				if (queueConnected) {
 					totalMinConfirmed = Math.Min(queueMinConfirmed, totalMinConfirmed);
@@ -490,7 +516,8 @@ namespace GGPort {
 					// check to see if this disconnect notification is further back than we've been before.  If
 					// so, we need to re-adjust.  This can happen when we detect our own disconnect at frame n
 					// and later receive a disconnect notification for frame n-1.
-					if (!localConnectStatuses[queue].IsDisconnected || localConnectStatuses[queue].LastFrame > queueMinConfirmed) {
+					if (!localConnectStatuses[queue].IsDisconnected
+					    || localConnectStatuses[queue].LastFrame > queueMinConfirmed) {
 						LogUtil.Log($"disconnecting queue {queue} by remote request.{Environment.NewLine}");
 						DisconnectPlayerQueue(queue, queueMinConfirmed);
 					}
@@ -498,14 +525,14 @@ namespace GGPort {
 
 				LogUtil.Log($"  total_min_confirmed = {totalMinConfirmed}.{Environment.NewLine}");
 			}
-			
+
 			return totalMinConfirmed;
 		}
 
 		private void AddRemotePlayer(IPEndPoint remoteEndPoint, int queue) {
 			// Start the state machine (xxx: no)
 			synchronizing = true;
-   
+
 			endpoints[queue].Init(ref transport, ref poll, queue, remoteEndPoint, localConnectStatuses);
 			endpoints[queue].SetDisconnectTimeout(disconnectTimeout);
 			endpoints[queue].SetDisconnectNotifyStart(disconnectNotifyStart);
@@ -516,11 +543,12 @@ namespace GGPort {
 			if (numSpectators == Types.kMaxSpectators) {
 				return ErrorCode.TooManySpectators;
 			}
-			
+
 			// Currently, we can only add spectators before the game starts.
 			if (!synchronizing) {
 				return ErrorCode.InvalidRequest;
 			}
+
 			int queue = numSpectators++;
 
 			spectators[queue].Init(ref transport, ref poll, queue + 1000, remoteEndPoint, localConnectStatuses);
@@ -530,8 +558,9 @@ namespace GGPort {
 
 			return ErrorCode.Success;
 		}
-		
-		protected virtual void OnSyncEvent(Sync.Event syncEvent) { } // TODO remove? does nothing here, but might do something in syncTest || spectator backends
+
+		// TODO remove? does nothing here, but might do something in syncTest || spectator backends
+		protected virtual void OnSyncEvent(Sync.Event syncEvent) { }
 
 		protected virtual void OnUdpProtocolEvent(ref Peer.Event evt, PlayerHandle handle) {
 			switch (evt.type) {
@@ -542,7 +571,7 @@ namespace GGPort {
 							player = handle
 						}
 					};
-					
+
 					callbacks.OnEvent(info);
 					break;
 				}
@@ -553,7 +582,7 @@ namespace GGPort {
 							player = handle, count = evt.synchronizing.Count, total = evt.synchronizing.Total
 						}
 					};
-					
+
 					callbacks.OnEvent(info);
 					break;
 				}
@@ -564,7 +593,7 @@ namespace GGPort {
 							player = handle
 						}
 					};
-					 
+
 					callbacks.OnEvent(info);
 
 					CheckInitialSync();
@@ -578,7 +607,7 @@ namespace GGPort {
 							player = handle, disconnect_timeout = evt.network_interrupted.DisconnectTimeout
 						}
 					};
-					
+
 					callbacks.OnEvent(info);
 					break;
 				}
@@ -590,7 +619,7 @@ namespace GGPort {
 							player = handle
 						}
 					};
-					
+
 					callbacks.OnEvent(info);
 					break;
 				}
@@ -604,14 +633,17 @@ namespace GGPort {
 					if (!localConnectStatuses[queue].IsDisconnected) {
 						int currentRemoteFrame = localConnectStatuses[queue].LastFrame;
 						int newRemoteFrame = evt.input.Frame;
-						
+
 						Platform.Assert(currentRemoteFrame == -1 || newRemoteFrame == currentRemoteFrame + 1);
 
 						sync.AddRemoteInput(queue, ref evt.input);
 						// Notify the other endpoints which frame we received from a peer
-						LogUtil.Log($"setting remote connect status for queue {queue} to {evt.input.Frame}{Environment.NewLine}");
+						LogUtil.Log(
+							$"setting remote connect status for queue {queue} to {evt.input.Frame}{Environment.NewLine}"
+						);
 						localConnectStatuses[queue].LastFrame = evt.input.Frame;
 					}
+
 					break;
 
 				case Peer.Event.Type.Disconnected:
@@ -634,7 +666,7 @@ namespace GGPort {
 							player = handle
 						}
 					};
-					
+
 					callbacks.OnEvent(info);
 
 					break;

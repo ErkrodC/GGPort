@@ -78,11 +78,9 @@ namespace GGPort {
 					}
 
 					// TODO: handle len == 0... indicates a disconnect.
-				} catch (Exception exception) {
-					Platform.AssertFailed(exception);
-					break;
-				} 
+				} catch { /* TODO ignoring ALL exceptions is ham-fisted */ }
 			}
+			
 			return true;
 		}
 

@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Text;
 using UnityEngine;
 
@@ -29,6 +30,36 @@ namespace GGPort {
 			
 			LogToFile(ref logFileStream, msg);
 #endif
+		}
+
+		public static void LogFailedAssertToFile(
+			string msg,
+			string callerFilePath,
+			string callerName,
+			int callerLineNumber
+		) {
+			if (!string.IsNullOrEmpty(callerFilePath)) {
+				string[] callerFilePathSplit = callerFilePath.Split('/', '\\');
+				string fileName = callerFilePathSplit[callerFilePathSplit.Length - 1];
+				
+				msg += $"{Environment.NewLine}{Environment.NewLine}\t\t{nameof(Platform.AssertFailed)} call {(callerLineNumber == -1 ? "In" : "@")} {fileName}";
+
+				if (callerLineNumber != -1) {
+					msg += $":{callerLineNumber}";
+				}
+
+				if (!string.IsNullOrEmpty(callerName)) {
+					msg += $",{Environment.NewLine}\t\tCaller: {callerName}{Environment.NewLine}{Environment.NewLine}";
+				}
+			}
+
+			Log($"{Environment.NewLine}{msg}");
+		}
+
+		public static void LogException(Exception exception) {
+			Log($"{Environment.NewLine}{Environment.NewLine}"
+			    + $"{exception}"
+			    + $"{Environment.NewLine}{Environment.NewLine}");
 		}
 
 		private static void LogToFile(ref FileStream fp, string msg) {

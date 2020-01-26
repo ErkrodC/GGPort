@@ -35,7 +35,8 @@ namespace GGPort {
 		) {
 			do {
 				if (!(expression)) {
-					AssertFailedInternal(msg, callerFilePath, callerName, callerLineNumber);
+					LogUtil.LogFailedAssertToFile(msg, callerFilePath, callerName, callerLineNumber);
+					Debugger.Break();
 				}
 			} while (false);
 		}
@@ -43,7 +44,7 @@ namespace GGPort {
 		public static void AssertFailed(Exception exception) {
 			Debug.LogException(exception);
 #if !UNITY_EDITOR
-			LogUtil.Log($"{Environment.NewLine}{Environment.NewLine}{exception}{Environment.NewLine}{Environment.NewLine}");
+			LogUtil.LogException(exception);
 #else
 			Debugger.Break();
 #endif
@@ -57,35 +58,10 @@ namespace GGPort {
 		) {
 			Debug.LogError(msg);
 #if !UNITY_EDITOR
-			AssertFailedInternal(msg, callerFilePath, callerName, callerLineNumber);
+			LogUtil.LogFailedAssertToFile(msg, callerFilePath, callerName, callerLineNumber);
 #else
 			Debugger.Break();
 #endif
-		}
-
-		private static void AssertFailedInternal(
-			string msg,
-			string callerFilePath,
-			string callerName,
-			int callerLineNumber
-		) {
-			if (!string.IsNullOrEmpty(callerFilePath)) {
-				string[] callerFilePathSplit = callerFilePath.Split('/', '\\');
-				string fileName = callerFilePathSplit[callerFilePathSplit.Length - 1];
-				
-				msg += $"{Environment.NewLine}{Environment.NewLine}\t\t{nameof(AssertFailed)} call {(callerLineNumber == -1 ? "In" : "@")} {fileName}";
-
-				if (callerLineNumber != -1) {
-					msg += $":{callerLineNumber}";
-				}
-
-				if (!string.IsNullOrEmpty(callerName)) {
-					msg += $",{Environment.NewLine}\t\tCaller: {callerName}{Environment.NewLine}{Environment.NewLine}";
-				}
-			}
-
-			LogUtil.Log($"{Environment.NewLine}{msg}");
-			Debugger.Break();
 		}
 
 		public static long GetCurrentTimeMS() {
