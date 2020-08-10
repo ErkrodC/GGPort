@@ -5,59 +5,77 @@ using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 
 namespace GGPort {
-	public class SyncTestBackend : Session {
-		private readonly SessionCallbacks callbacks;
-		private readonly Sync sync;
-		private readonly int numPlayers;
-		private readonly int checkDistance;
-		private int lastVerified;
-		private bool isRollingBack;
-		private bool isRunning;
-		private FileStream logFile;
-		private string gameName;
+	public class SyncTestBackend<TGameState> : Session<TGameState> {
+		private readonly Sync<TGameState> m_sync;
+		private readonly int m_numPlayers;
+		private readonly int m_checkDistance;
+		private int m_lastVerified;
+		private bool m_isRollingBack;
+		private bool m_isRunning;
+		private FileStream m_logFile;
+		private string m_gameName;
 
-		private GameInput currentInput;
-		private GameInput lastInput;
-		private readonly CircularQueue<SavedInfo> savedFrames;
+		private GameInput m_currentInput;
+		private GameInput m_lastInput;
+		private readonly CircularQueue<SavedInfo> m_savedFrames;
 
-		public SyncTestBackend(ref SessionCallbacks cb, string gameName, int frames, int numPlayers) {
-			savedFrames = new CircularQueue<SavedInfo>(32);
+		public SyncTestBackend(
+			BeginGameDelegate beginGameCallback,
+			SaveGameStateDelegate saveGameStateCallback,
+			LoadGameStateDelegate loadGameStateCallback,
+			LogGameStateDelegate logGameStateCallback,
+			FreeBufferDelegate freeBufferCallback,
+			AdvanceFrameDelegate advanceFrameCallback,
+			OnEventDelegate onEventCallback,
+			LogTextDelegate logTextCallback,
+			string gameName,
+			int frames,
+			int numPlayers
+		) : base(
+			beginGameCallback,
+			saveGameStateCallback,
+			loadGameStateCallback,
+			logGameStateCallback,
+			freeBufferCallback,
+			advanceFrameCallback,
+			onEventCallback,
+			logTextCallback
+		) {
+			m_savedFrames = new CircularQueue<SavedInfo>(32);
 			
-			sync = null;
-			callbacks = cb;
-			this.numPlayers = numPlayers;
-			checkDistance = frames;
-			lastVerified = 0;
-			isRollingBack = false;
-			isRunning = false;
-			logFile = null;
-			currentInput.Erase();
-			this.gameName = gameName;
+			m_sync = null;
+			m_numPlayers = numPlayers;
+			m_checkDistance = frames;
+			m_lastVerified = 0;
+			m_isRollingBack = false;
+			m_isRunning = false;
+			m_logFile = null;
+			m_currentInput.Erase();
+			m_gameName = gameName;
 
-			/*
-			 * Initialize the synchronziation layer
-			 */
-			Sync.Config config = new Sync.Config(callbacks, Sync.kMaxPredictionFrames);
-			sync.Init(config);
+			// Initialize the synchronization layer
+			m_sync = new Sync<TGameState>(new PeerMessage.ConnectStatus[PeerMessage.kMaxPlayers], Sync<TGameState>.MAX_PREDICTION_FRAMES);
+			m_sync.advanceFrameEvent += advanceFrameCallback;
+			m_sync.saveGameStateEvent += saveGameStateCallback;
+			m_sync.loadGameStateEvent += loadGameStateCallback;
+			m_sync.freeBufferEvent += freeBufferCallback;
 
-			/*
-			 * Preload the ROM
-			 */
-			callbacks.BeginGame(gameName);
+			// Preload the ROM
+			BeginGameEvent?.Invoke(gameName);
 		}
 
 		public override ErrorCode Idle(int timeout) {
-			if (!isRunning) {
-				Event info = new Event(EventCode.Running);
+			if (m_isRunning) { return ErrorCode.Success; }
+
+			Event info = new Event(EventCode.Running);
 				
-				callbacks.OnEvent(info);
-				isRunning = true;
-			}
+			OnEventEvent?.Invoke(info);
+			m_isRunning = true;
 			return ErrorCode.Success;
 		}
 
 		public override ErrorCode AddPlayer(Player player, out PlayerHandle handle) {
-			if (player.PlayerNum < 1 || player.PlayerNum > numPlayers) {
+			if (player.PlayerNum < 1 || player.PlayerNum > m_numPlayers) {
 				handle = new PlayerHandle(-1);
 				return ErrorCode.PlayerOutOfRange;
 			}
@@ -67,7 +85,7 @@ namespace GGPort {
 		}
 
 		public override unsafe ErrorCode AddLocalInput(PlayerHandle player, byte[] value, int size) {
-			if (!isRunning) {
+			if (!m_isRunning) {
 				return ErrorCode.NotSynchronized;
 			}
 
@@ -80,7 +98,7 @@ namespace GGPort {
 			} // TODO refactor/optimize
 			
 			for (int i = 0; i < size; i++) {
-				currentInput.Bits[index * size + i] |= valByteArr[i];
+				m_currentInput.Bits[index * size + i] |= valByteArr[i];
 			}
 			return ErrorCode.Success;
 		}
@@ -89,17 +107,17 @@ namespace GGPort {
 		public override unsafe ErrorCode SynchronizeInput(Array values, int size, ref int disconnectFlags) {
 			BeginLog(false);
 			
-			if (isRollingBack) {
-				lastInput = savedFrames.Peek().Input;
+			if (m_isRollingBack) {
+				m_lastInput = m_savedFrames.Peek().Input;
 			} else {
-				if (sync.GetFrameCount() == 0) {
-					sync.SaveCurrentFrame();
+				if (m_sync.GetFrameCount() == 0) {
+					m_sync.SaveCurrentFrame();
 				}
-				lastInput = currentInput;
+				m_lastInput = m_currentInput;
 			}
 
 			for (int i = 0; i < size; i++) {
-				Buffer.SetByte(values, i, lastInput.Bits[i]);
+				Buffer.SetByte(values, i, m_lastInput.Bits[i]);
 			}
 			
 			disconnectFlags = 0;
@@ -108,48 +126,48 @@ namespace GGPort {
 		}
 
 		public override ErrorCode AdvanceFrame() {
-			sync.IncrementFrame();
-			currentInput.Erase();
+			m_sync.IncrementFrame();
+			m_currentInput.Erase();
    
-			LogUtil.Log($"End of frame({sync.GetFrameCount()})...{Environment.NewLine}");
+			LogUtil.Log($"End of frame({m_sync.GetFrameCount()})...{Environment.NewLine}");
 			EndLog();
 
-			if (isRollingBack) {
+			if (m_isRollingBack) {
 				return ErrorCode.Success;
 			}
 
-			int frame = sync.GetFrameCount();
+			int frame = m_sync.GetFrameCount();
 			// Hold onto the current frame in our queue of saved states.  We'll need
 			// the checksum later to verify that our replay of the same frame got the
 			// same results.
-			Sync.SavedFrame lastSavedFrame = sync.GetLastSavedFrame();
+			Sync<TGameState>.SavedFrame lastSavedFrame = m_sync.GetLastSavedFrame();
 			
 			SavedInfo info = new SavedInfo(
 				frame,
 				lastSavedFrame.Checksum,
 				lastSavedFrame.GameState,
-				lastInput
+				m_lastInput
 			);
 			
-			savedFrames.Push(info);
+			m_savedFrames.Push(info);
 
-			if (frame - lastVerified == checkDistance) {
+			if (frame - m_lastVerified == m_checkDistance) {
 				// We've gone far enough ahead and should now start replaying frames.
 				// Load the last verified frame and set the rollback flag to true.
-				sync.LoadFrame(lastVerified);
+				m_sync.LoadFrame(m_lastVerified);
 
-				isRollingBack = true;
-				while(savedFrames.Count > 0) {
-					callbacks.AdvanceFrame(0);
+				m_isRollingBack = true;
+				while(m_savedFrames.Count > 0) {
+					AdvanceFrameEvent?.Invoke(0);
 
 					// Verify that the checksumn of this frame is the same as the one in our
 					// list.
-					info = savedFrames.Pop();
+					info = m_savedFrames.Pop();
 
-					if (info.Frame != sync.GetFrameCount()) {
+					if (info.Frame != m_sync.GetFrameCount()) {
 						RaiseSyncError("Frame number %d does not match saved frame number %d", info.Frame, frame);
 					}
-					int checksum = sync.GetLastSavedFrame().Checksum;
+					int checksum = m_sync.GetLastSavedFrame().Checksum;
 					if (info.Checksum != checksum) {
 						LogSaveStates(info);
 						RaiseSyncError("Checksum for frame %d does not match saved (%d != %d)", frame, checksum, info.Checksum);
@@ -158,20 +176,20 @@ namespace GGPort {
 					Console.WriteLine($"Checksum {checksum:00000000} for frame {info.Frame} matches.{Environment.NewLine}");
 					info.FreeBuffer();
 				}
-				lastVerified = frame;
-				isRollingBack = false;
+				m_lastVerified = frame;
+				m_isRollingBack = false;
 			}
 
 			return ErrorCode.Success;
 		}
 
 		public virtual ErrorCode Logv(string fmt, params object[] args) {
-			if (logFile != null) {
+			if (m_logFile != null) {
 				char[] msg = string.Format(fmt, args).ToCharArray();
 				byte[] buf = new byte[msg.Length];
 				Buffer.BlockCopy(msg, 0, buf, 0, msg.Length);
 
-				logFile.Write(buf, 0, msg.Length);
+				m_logFile.Write(buf, 0, msg.Length);
 			}
 			
 			return ErrorCode.Success;
@@ -180,10 +198,10 @@ namespace GGPort {
 		protected struct SavedInfo {
 			public readonly int Frame;
 			public readonly int Checksum;
-			public object GameState { get; private set; }
+			public TGameState GameState { get; private set; }
 			public readonly GameInput Input;
 
-			public SavedInfo(int frame, int checksum, object gameState, GameInput input) {
+			public SavedInfo(int frame, int checksum, TGameState gameState, GameInput input) {
 				Frame = frame;
 				Checksum = checksum;
 				GameState = gameState;
@@ -209,28 +227,28 @@ namespace GGPort {
 
 			Directory.CreateDirectory("synclogs");
 			string filename =
-				$"synclogs\\{(saving ? "state" : "log")}-{sync.GetFrameCount():0000}-{(isRollingBack ? "replay" : "original")}.log";
+				$"synclogs\\{(saving ? "state" : "log")}-{m_sync.GetFrameCount():0000}-{(m_isRollingBack ? "replay" : "original")}.log";
 
-			logFile = File.Open(filename, FileMode.OpenOrCreate);
+			m_logFile = File.Open(filename, FileMode.OpenOrCreate);
 		}
 
 		protected void EndLog() {
-			if (logFile != null) {
+			if (m_logFile != null) {
 				string msg = $"Closing log file.{Environment.NewLine}";
 				byte[] buffer = Encoding.UTF8.GetBytes(msg);
 
-				logFile.Write(buffer, 0, buffer.Length);
-				logFile.Close();
-				logFile = null;
+				m_logFile.Write(buffer, 0, buffer.Length);
+				m_logFile.Close();
+				m_logFile = null;
 			}
 		}
 
 		protected void LogSaveStates(SavedInfo info) {
-			string filename = $"synclogs\\state-{sync.GetFrameCount():0000}-original.log";
-			callbacks.LogGameState(filename, info.GameState);
+			string filename = $"synclogs\\state-{m_sync.GetFrameCount():0000}-original.log";
+			LogGameStateEvent?.Invoke(filename, info.GameState);
 
-			filename = $"synclogs\\state-{sync.GetFrameCount():0000}-replay.log";
-			callbacks.LogGameState(filename, sync.GetLastSavedFrame().GameState);
+			filename = $"synclogs\\state-{m_sync.GetFrameCount():0000}-replay.log";
+			LogGameStateEvent?.Invoke(filename, m_sync.GetLastSavedFrame().GameState);
 		}
 	};
 }

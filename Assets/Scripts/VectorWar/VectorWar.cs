@@ -12,13 +12,14 @@ using Event = GGPort.Event;
 namespace VectorWar {
 	// Interface to the vector war application.
 	public static class VectorWar {
-		private const int kFrameDelay = 0;
-		private const int kMaxPlayers = 64;
+		public static event Session<GameState>.LogTextDelegate logTextEvent;
+		
+		private const int m_FRAME_DELAY = 0;
+		private const int m_MAX_PLAYERS = 64;
 
-		private static GameState gameState = new GameState();
-		private static readonly NonGameState kNonGameState = new NonGameState();
-		private static Session session = null;
-		public static event SessionCallbacks.LogDelegate LogCallback = delegate(string message) {  };
+		private static GameState ms_gameState = new GameState();
+		private static readonly NonGameState ms_NON_GAME_STATE = new NonGameState();
+		private static Session<GameState> ms_session;
 
 		[Flags]
 		public enum Input {
@@ -31,83 +32,72 @@ namespace VectorWar {
 		};
 
 		public static void Init(ushort localPort, int numPlayers, Player[] players, int numSpectators) {
-			ErrorCode result;
-
 			// Initialize the game state
-			gameState.Init(numPlayers);
-			kNonGameState.NumPlayers = numPlayers;
-
-			// Fill in a ggpo callbacks structure to pass to start_session.
-			SessionCallbacks sessionCallbacks = new SessionCallbacks {
-				BeginGame = BeginGame,
-				AdvanceFrame = AdvanceFrame,
-				LoadGameState = LoadGameState,
-				SaveGameState = SaveGameState,
-				FreeBuffer = FreeBuffer,
-				OnEvent = OnEvent,
-				LogGameState = LogGameState,
-#if SHOW_LOG				
-				LogText = LogCallback
-#endif
-			};
+			ms_gameState.Init(numPlayers);
+			ms_NON_GAME_STATE.NumPlayers = numPlayers;
 
 #if SYNC_TEST
 			result = GGPOMain.ggpo_start_synctest(ref ggpo, ref cb, "vectorwar", num_players, sizeof(int), 1);
 #else
-			result = Session.StartSession(out session, sessionCallbacks, "VectorWar", numPlayers, sizeof(int), localPort);
+			ErrorCode result = Session<GameState>.StartSession(
+				out ms_session,
+				OnBeginGame,
+				OnSaveGameState,
+				OnLoadGameState,
+				OnLogGameState,
+				OnFreeBuffer,
+				OnAdvanceFrame,
+				OnEvent,
+				logTextEvent,
+				"VectorWar",
+				numPlayers,
+				sizeof(int),
+				localPort
+			);
 #endif
 
 			// automatically disconnect clients after 3000 ms and start our count-down timer
 			// for disconnects after 1000 ms.   To completely disable disconnects, simply use
 			// a value of 0 for ggpo_set_disconnect_timeout.
-			session.SetDisconnectTimeout(3000);
-			session.SetDisconnectNotifyStart(1000);
+			ms_session.SetDisconnectTimeout(3000);
+			ms_session.SetDisconnectNotifyStart(1000);
 
 			int i;
 			for (i = 0; i < numPlayers + numSpectators; i++) {
-				result = session.AddPlayer(players[i], out PlayerHandle handle);
-				kNonGameState.Players[i].Handle = handle;
-				kNonGameState.Players[i].Type = players[i].Type;
+				result = ms_session.AddPlayer(players[i], out PlayerHandle handle);
+				ms_NON_GAME_STATE.Players[i].Handle = handle;
+				ms_NON_GAME_STATE.Players[i].Type = players[i].Type;
 				if (players[i].Type == PlayerType.Local) {
-					kNonGameState.Players[i].ConnectProgress = 100;
-					kNonGameState.LocalPlayerHandle = handle;
-					kNonGameState.SetConnectState(handle, PlayerConnectState.Connecting);
-					session.SetFrameDelay(handle, kFrameDelay);
+					ms_NON_GAME_STATE.Players[i].ConnectProgress = 100;
+					ms_NON_GAME_STATE.LocalPlayerHandle = handle;
+					ms_NON_GAME_STATE.SetConnectState(handle, PlayerConnectState.Connecting);
+					ms_session.SetFrameDelay(handle, m_FRAME_DELAY);
 				} else {
-					kNonGameState.Players[i].ConnectProgress = 0;
+					ms_NON_GAME_STATE.Players[i].ConnectProgress = 0;
 				}
 			}
 
-			PerfMon.ggpoutil_perfmon_init();
+			PerfMon<GameState>.ggpoutil_perfmon_init();
 			GameRenderer.instance.SetStatusText("Connecting to peers.");
 		}
 
 		// Create a new spectator session
-		private static Session spectatorSession; // TODO was this variable in the C++?
+		private static Session<GameState> ms_spectatorSession; // TODO was this variable in the C++?
 		public static void InitSpectator(ushort localPort, int numPlayers, IPEndPoint hostEndPoint) {
-			ErrorCode result;
-
 			// Initialize the game state
-			gameState.Init(numPlayers);
-			kNonGameState.NumPlayers = numPlayers;
+			ms_gameState.Init(numPlayers);
+			ms_NON_GAME_STATE.NumPlayers = numPlayers;
 
-			// Fill in a ggpo callbacks structure to pass to start_session.
-			SessionCallbacks callbacks = new SessionCallbacks {
-				BeginGame = BeginGame,
-				AdvanceFrame = AdvanceFrame,
-				LoadGameState = LoadGameState,
-				SaveGameState = SaveGameState,
-				FreeBuffer = FreeBuffer,
-				OnEvent = OnEvent,
-				LogGameState = LogGameState,
-#if SHOW_LOG
-				LogText = LogCallback
-#endif
-			};
-
-			result = Session.StartSpectating(
-				out spectatorSession,
-				callbacks,
+			ErrorCode result = Session<GameState>.StartSpectating(
+				out ms_spectatorSession,
+				OnBeginGame,
+				OnSaveGameState,
+				OnLoadGameState,
+				OnLogGameState,
+				OnFreeBuffer,
+				OnAdvanceFrame,
+				OnEvent,
+				logTextEvent,
 				"VectorWar",
 				numPlayers,
 				sizeof(int),
@@ -115,16 +105,16 @@ namespace VectorWar {
 				hostEndPoint
 			);
 
-			PerfMon.ggpoutil_perfmon_init();
+			PerfMon<GameState>.ggpoutil_perfmon_init();
 
 			GameRenderer.instance.SetStatusText("Starting new spectator session");
 		}
 		
 		// Disconnects a player from this session.
 		public static void DisconnectPlayer(int player) {
-			if (player >= kNonGameState.NumPlayers) { return; }
+			if (player >= ms_NON_GAME_STATE.NumPlayers) { return; }
 
-			ErrorCode result = session.DisconnectPlayer(kNonGameState.Players[player].Handle);
+			ErrorCode result = ms_session.DisconnectPlayer(ms_NON_GAME_STATE.Players[player].Handle);
 
 			string logMsg = result.IsSuccess()
 				? $"Disconnected player {player}.{Environment.NewLine}"
@@ -136,7 +126,7 @@ namespace VectorWar {
 		// Draws the current frame without modifying the game state.
 		public static void DrawCurrentFrame() {
 			
-				GameRenderer.instance.Draw(gameState, kNonGameState);
+				GameRenderer.instance.Draw(ms_gameState, ms_NON_GAME_STATE);
 			// TODO update unity visualization here
 		}
 
@@ -145,29 +135,29 @@ namespace VectorWar {
 		* for player 1 and player 2.
 		*/
 		public static void AdvanceFrame(int[] inputs, int disconnectFlags) {
-			gameState.Update(inputs, disconnectFlags);
+			ms_gameState.Update(inputs, disconnectFlags);
 
 			// update the checksums to display in the top of the window.  this
 			// helps to detect desyncs.
-			kNonGameState.Now.FrameNumber = gameState.FrameNumber;
-			kNonGameState.Now.Checksum = Fletcher32Checksum(gameState.Serialize());
-			if (gameState.FrameNumber % 90 == 0) {
-				kNonGameState.Periodic = kNonGameState.Now;
+			ms_NON_GAME_STATE.Now.FrameNumber = ms_gameState.FrameNumber;
+			ms_NON_GAME_STATE.Now.Checksum = Fletcher32Checksum(ms_gameState.Serialize());
+			if (ms_gameState.FrameNumber % 90 == 0) {
+				ms_NON_GAME_STATE.Periodic = ms_NON_GAME_STATE.Now;
 			}
 
 			// Notify ggpo that we've moved forward exactly 1 frame.
-			session.AdvanceFrame();
+			ms_session.AdvanceFrame();
 
 			// Update the performance monitor display.
-			PlayerHandle[] handles = new PlayerHandle[kMaxPlayers];
+			PlayerHandle[] handles = new PlayerHandle[m_MAX_PLAYERS];
 			int count = 0;
-			for (int i = 0; i < kNonGameState.NumPlayers; i++) {
-				if (kNonGameState.Players[i].Type == PlayerType.Remote) {
-					handles[count++] = kNonGameState.Players[i].Handle;
+			for (int i = 0; i < ms_NON_GAME_STATE.NumPlayers; i++) {
+				if (ms_NON_GAME_STATE.Players[i].Type == PlayerType.Remote) {
+					handles[count++] = ms_NON_GAME_STATE.Players[i].Handle;
 				}
 			}
 
-			PerfMon.ggpoutil_perfmon_update(ref session, handles, count);
+			PerfMon<GameState>.ggpoutil_perfmon_update(ref ms_session, handles, count);
 		}
 		
 		/*
@@ -177,21 +167,21 @@ namespace VectorWar {
 		*/
 		public static int ReadInputs() {
 			Keybind[] inputtable = {
-				new Keybind{ KeyCode = KeyCode.UpArrow, Input = Input.InputThrust },
-				new Keybind{ KeyCode = KeyCode.DownArrow, Input = Input.InputBreak },
-				new Keybind{ KeyCode = KeyCode.LeftArrow, Input = Input.InputRotateLeft },
-				new Keybind{ KeyCode = KeyCode.RightArrow, Input = Input.InputRotateRight },
-				new Keybind{ KeyCode = KeyCode.D, Input = Input.InputFire },
-				new Keybind{ KeyCode = KeyCode.S, Input = Input.InputBomb }
+				new Keybind{ keyCode = KeyCode.UpArrow, input = Input.InputThrust },
+				new Keybind{ keyCode = KeyCode.DownArrow, input = Input.InputBreak },
+				new Keybind{ keyCode = KeyCode.LeftArrow, input = Input.InputRotateLeft },
+				new Keybind{ keyCode = KeyCode.RightArrow, input = Input.InputRotateRight },
+				new Keybind{ keyCode = KeyCode.D, input = Input.InputFire },
+				new Keybind{ keyCode = KeyCode.S, input = Input.InputBomb }
 			};
 			
 			int i, inputs = 0;
 			
 			for (i = 0; i < inputtable.Length; i++) {
-				if (UnityEngine.Input.GetKey(inputtable[i].KeyCode)) {
-					inputs |= (int) inputtable[i].Input;
-				} else if (inputtable[i].KeyCode == KeyCode.LeftArrow) {
-					inputs |= (int) inputtable[i].Input;
+				if (UnityEngine.Input.GetKey(inputtable[i].keyCode)) {
+					inputs |= (int) inputtable[i].input;
+				} else if (inputtable[i].keyCode == KeyCode.LeftArrow) {
+					inputs |= (int) inputtable[i].input;
 				}
 			}
    
@@ -199,7 +189,7 @@ namespace VectorWar {
 		}
 
 		// Run a single frame of the game.
-		private static readonly byte[] SerializedInput = new byte[4];
+		private static readonly byte[] ms_SERIALIZED_INPUT = new byte[4];
 		public static void RunFrame() {
 			ErrorCode result = ErrorCode.Success;
 			int disconnectFlags = 0;
@@ -207,25 +197,25 @@ namespace VectorWar {
 
 			for (int i = 0; i < inputs.Length; i++) { inputs[i] = 0; }
 
-			if (kNonGameState.LocalPlayerHandle.HandleValue != PlayerHandle.kInvalidHandle) {
+			if (ms_NON_GAME_STATE.LocalPlayerHandle.HandleValue != PlayerHandle.kInvalidHandle) {
 				int input = ReadInputs();
 #if SYNC_TEST
 				input = rand(); // test: use random inputs to demonstrate sync testing
 #endif
-				SerializedInput[0] = (byte) input;
-				SerializedInput[1] = (byte) (input >> 8);
-				SerializedInput[2] = (byte) (input >> 16);
-				SerializedInput[3] = (byte) (input >> 24);
+				ms_SERIALIZED_INPUT[0] = (byte) input;
+				ms_SERIALIZED_INPUT[1] = (byte) (input >> 8);
+				ms_SERIALIZED_INPUT[2] = (byte) (input >> 16);
+				ms_SERIALIZED_INPUT[3] = (byte) (input >> 24);
 
 				// XXX LOH size should 4 bytes? check inside, erroneously using serializedInputLength?
-				result = session.AddLocalInput(kNonGameState.LocalPlayerHandle, SerializedInput, sizeof(int)); // NOTE hardcoding input type
+				result = ms_session.AddLocalInput(ms_NON_GAME_STATE.LocalPlayerHandle, ms_SERIALIZED_INPUT, sizeof(int)); // NOTE hardcoding input type
 			}
 
 			// synchronize these inputs with ggpo.  If we have enough input to proceed
 			// ggpo will modify the input list with the correct inputs to use and
 			// return 1.
 			if (result.IsSuccess()) {
-				result = session.SynchronizeInput(inputs, sizeof(int) * GameState.kMaxShips, ref disconnectFlags);
+				result = ms_session.SynchronizeInput(inputs, sizeof(int) * GameState.kMaxShips, ref disconnectFlags);
 				if (result.IsSuccess()) {
 					// inputs[0] and inputs[1] contain the inputs for p1 and p2.  Advance
 					// the game by 1 frame using those inputs.
@@ -241,7 +231,7 @@ namespace VectorWar {
 		* for its internal bookkeeping.
 		*/
 		public static void Idle(int time) {
-			session.Idle(time);
+			ms_session.Idle(time);
 		}
 
 		public static void Exit() {
@@ -249,9 +239,9 @@ namespace VectorWar {
 			/*gs = TODO_memsetZero;
 			ngs = TODO_memsetZero;*/
 
-			if (session != null) {
-				session.CloseSession();
-				session = null;
+			if (ms_session != null) {
+				ms_session.CloseSession();
+				ms_session = null;
 			}
 
 			GameRenderer.instance = null;
@@ -298,7 +288,7 @@ namespace VectorWar {
 		* The begin game callback.  We don't need to do anything special here,
 		* so just return true.
 		*/
-		public static bool BeginGame(string game) {
+		public static bool OnBeginGame(string game) {
 			return true;
 		}
 		
@@ -310,30 +300,30 @@ namespace VectorWar {
 		public static bool OnEvent(Event info) {
 			switch (info.code) {
 				case EventCode.ConnectedToPeer:
-					kNonGameState.SetConnectState(info.connected.player, PlayerConnectState.Synchronizing);
+					ms_NON_GAME_STATE.SetConnectState(info.connected.player, PlayerConnectState.Synchronizing);
 					GameRenderer.instance.SetStatusText($"Connected to player {info.connected.player.HandleValue}");
 					break;
 				case EventCode.SynchronizingWithPeer:
 					int progress = 100 * info.synchronizing.count / info.synchronizing.total;
-					kNonGameState.UpdateConnectProgress(info.synchronizing.player, progress);
+					ms_NON_GAME_STATE.UpdateConnectProgress(info.synchronizing.player, progress);
 					break;
 				case EventCode.SynchronizedWithPeer:
-					kNonGameState.UpdateConnectProgress(info.synchronized.player, 100);
+					ms_NON_GAME_STATE.UpdateConnectProgress(info.synchronized.player, 100);
 					break;
 				case EventCode.Running:
-					kNonGameState.SetConnectState(PlayerConnectState.Running);
+					ms_NON_GAME_STATE.SetConnectState(PlayerConnectState.Running);
 					GameRenderer.instance.SetStatusText("");
 					break;
 				case EventCode.ConnectionInterrupted:
-					kNonGameState.SetDisconnectTimeout(info.connectionInterrupted.player,
+					ms_NON_GAME_STATE.SetDisconnectTimeout(info.connectionInterrupted.player,
 						Platform.GetCurrentTimeMS(),
 						info.connectionInterrupted.disconnect_timeout);
 					break;
 				case EventCode.ConnectionResumed:
-					kNonGameState.SetConnectState(info.connectionResumed.player, PlayerConnectState.Running);
+					ms_NON_GAME_STATE.SetConnectState(info.connectionResumed.player, PlayerConnectState.Running);
 					break;
 				case EventCode.DisconnectedFromPeer:
-					kNonGameState.SetConnectState(info.disconnected.player, PlayerConnectState.Disconnected);
+					ms_NON_GAME_STATE.SetConnectState(info.disconnected.player, PlayerConnectState.Disconnected);
 					break;
 				case EventCode.TimeSync:
 					Thread.Sleep(1000 * info.timeSync.framesAhead / 60);
@@ -346,20 +336,20 @@ namespace VectorWar {
 		* Notification from GGPO we should step forward exactly 1 frame
 		* during a rollback.
 		*/
-		public static bool AdvanceFrame(int flags) {
+		public static bool OnAdvanceFrame(int flags) {
 			int[] inputs = new int[GameState.kMaxShips];
 			int disconnectFlags = 0;
 
 			// Make sure we fetch new inputs from GGPO and use those to update
 			// the game state instead of reading from the keyboard.
-			session.SynchronizeInput(inputs, sizeof(int) * GameState.kMaxShips, ref disconnectFlags);
+			ms_session.SynchronizeInput(inputs, sizeof(int) * GameState.kMaxShips, ref disconnectFlags);
 			AdvanceFrame(inputs, disconnectFlags);
 			return true;
 		}
 		
 		// Makes our current state match the state passed in by GGPO.
-		public static bool LoadGameState(object gameState) {
-			VectorWar.gameState = gameState as GameState;
+		public static bool OnLoadGameState(GameState gameState) {
+			ms_gameState = gameState;
 			return true;
 		}
 		
@@ -367,24 +357,23 @@ namespace VectorWar {
 		* Save the current state to a buffer and return it to GGPO via the
 		* buffer and len parameters.
 		*/
-		public static bool SaveGameState(out object gameState, out int checksum, int frame) {
-			gameState = VectorWar.gameState;
-			VectorWar.gameState.Serialize(VectorWar.gameState.Size(), out byte[] buffer); // TODO probably a better way to get the checksum.
+		public static bool OnSaveGameState(out GameState gameState, out int checksum, int frame) {
+			gameState = ms_gameState;
+			ms_gameState.Serialize(ms_gameState.Size(), out byte[] buffer); // TODO probably a better way to get the checksum.
 			checksum = Fletcher32Checksum(buffer);
 			return true;
 		}
 		
 		// Log the game state.  Used by the sync test debugging tool.
-		public static bool LogGameState(string filename, object gameState) {
+		public static bool OnLogGameState(string filename, GameState gameState) {
 			FileStream fp = File.Open(filename, FileMode.OpenOrCreate, FileAccess.Write);
-
-			GameState castedGameState = gameState as GameState;
-			StringBuilder stringBuilder = new StringBuilder($"GameState object.{Environment.NewLine}");
-			stringBuilder.Append($"  bounds: {castedGameState.Bounds.xMin},{castedGameState.Bounds.yMin} x {castedGameState.Bounds.xMax},{castedGameState.Bounds.yMax}.{Environment.NewLine}");
-			stringBuilder.Append($"  num_ships: {castedGameState.NumShips}.{Environment.NewLine}");
 			
-			for (int i = 0; i < castedGameState.NumShips; i++) {
-				Ship ship = castedGameState.Ships[i];
+			StringBuilder stringBuilder = new StringBuilder($"GameState object.{Environment.NewLine}");
+			stringBuilder.Append($"  bounds: {gameState.Bounds.xMin},{gameState.Bounds.yMin} x {gameState.Bounds.xMax},{gameState.Bounds.yMax}.{Environment.NewLine}");
+			stringBuilder.Append($"  num_ships: {gameState.NumShips}.{Environment.NewLine}");
+			
+			for (int i = 0; i < gameState.NumShips; i++) {
+				Ship ship = gameState.Ships[i];
 				
 				stringBuilder.Append($"  ship {i} position:  {ship.position.x:F4}, {ship.position.y:F4}{Environment.NewLine}");
 				stringBuilder.Append($"  ship {i} velocity:  {ship.velocity.x:F4}, {ship.velocity.y:F4}{Environment.NewLine}");
@@ -408,13 +397,13 @@ namespace VectorWar {
 		}
 		
 		// Free a save state buffer previously returned in vw_save_game_state_callback.
-		public static void FreeBuffer(object gameState) {
+		public static void OnFreeBuffer(object gameState) {
 			//free(buffer); // NOTE nothing for managed lang, though could prove useful nonetheless.
 		}
 		
 		public struct Keybind {
-			public KeyCode KeyCode;
-			public Input Input;
+			public KeyCode keyCode;
+			public Input input;
 		}
 	}
 }

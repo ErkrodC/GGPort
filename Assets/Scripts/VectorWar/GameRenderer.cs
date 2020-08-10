@@ -16,7 +16,7 @@ namespace VectorWar {
 		
 		private void Awake() {
 			instance = this;
-			VectorWar.LogCallback += Log;
+			VectorWar.logTextEvent += logView.Log;
 			
 			visualShips = new GameObject[GameState.kMaxShips];
 			for (int i = 0; i < visualShips.Length; i++) {
@@ -30,7 +30,7 @@ namespace VectorWar {
 		}
 
 		private void OnDestroy() {
-			VectorWar.LogCallback -= Log;
+			VectorWar.logTextEvent -= logView.Log;
 		}
 
 		public void SetStatusText(string text) {
@@ -39,10 +39,6 @@ namespace VectorWar {
 
 		public void MessageBox(string message) {
 			messageBox.ShowMessage(message);
-		}
-
-		public void Log(string message) {
-			logView.Log(message);
 		}
 
 		public void Draw(GameState gameState, NonGameState nonGameState) {

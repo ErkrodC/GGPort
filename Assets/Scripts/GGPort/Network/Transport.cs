@@ -14,39 +14,37 @@ using System.Runtime.Serialization.Formatters.Binary;
 
 namespace GGPort {
 	public class Transport : IPollSink {
-		public const int kMaxUDPEndpoints = 16;
+		public const int MAX_UDP_ENDPOINTS = 16;
 		// TODO readdress serialization, no need for type data to be sent with custom protocol
-		private const int kMaxUDPPacketSize = /*4096*/ 4096 * 2;
+		private const int MAX_UDP_PACKET_SIZE = /*4096*/ 4096 * 2;
 		
 		// Network transmission information
-		private Socket socket;
+		private Socket m_socket;
 
 		// state management
-		private ICallbacks callbacks;
-		private Poll poll;
+		private readonly Action<IPEndPoint, PeerMessage> m_onMessageReceived;
 
 		private static void Log(string msg) {
 			LogUtil.Log($"{nameof(Transport)} | {msg}");
 		}
 
-		~Transport() {
-			socket.Close();
-			socket = null;
-		}
-
-		public void Init(ushort port, Poll poll, ICallbacks callbacks) {
-			this.callbacks = callbacks;
-			this.poll = poll;
-			this.poll.RegisterLoop(this);
+		public Transport(ushort port, Poll poll, Action<IPEndPoint, PeerMessage> onMessageReceived) {
+			m_onMessageReceived = onMessageReceived;
+			poll.RegisterLoop(this);
 
 			Log($"binding udp socket to port {port}.{Environment.NewLine}");
-			socket = CreateSocket(port, 0);
+			m_socket = CreateSocket(port, 0);
+		}
+
+		~Transport() {
+			m_socket.Close();
+			m_socket = null;
 		}
 	   
 		public int SendTo(byte[] buffer, int len, SocketFlags flags, IPEndPoint dst) {
 			int sentBytes = 0;
 			try {
-				sentBytes = socket.SendTo(buffer, len, flags, dst);
+				sentBytes = m_socket.SendTo(buffer, len, flags, dst);
 				Log($"sent packet length {len} to {dst.Address}:{dst.Port} (ret:{sentBytes}).{Environment.NewLine}");
 			} catch (Exception exception) {
 				Platform.AssertFailed(exception); // TODO do .ToString() for exceptions elsewhere
@@ -57,21 +55,21 @@ namespace GGPort {
 		}
 
 		public bool OnLoopPoll(object cookie) {
-			byte[] receiveBuffer = new byte[kMaxUDPPacketSize];
+			byte[] receiveBuffer = new byte[MAX_UDP_PACKET_SIZE];
 
 			EndPoint remoteEP = new IPEndPoint(IPAddress.Any, 0);
 			
 			for (;;) {
 				try {
-					if (socket.Available == 0) { break; }
-					int len = socket.ReceiveFrom(receiveBuffer, kMaxUDPPacketSize, SocketFlags.None, ref remoteEP);
+					if (m_socket.Available == 0) { break; }
+					int len = m_socket.ReceiveFrom(receiveBuffer, MAX_UDP_PACKET_SIZE, SocketFlags.None, ref remoteEP);
 
 					if (remoteEP is IPEndPoint remoteIP) {
 						Log($"recvfrom returned (len:{len}  from:{remoteIP.Address}:{remoteIP.Port}).{Environment.NewLine}");
 						IFormatter br = new BinaryFormatter();
 						using (MemoryStream ms = new MemoryStream(receiveBuffer)) {
 							PeerMessage msg = (PeerMessage) br.Deserialize(ms); // TODO deserialization probably doesn't work? why does it work for syncing but not input?
-							callbacks.OnMsg(remoteIP, msg);
+							m_onMessageReceived?.Invoke(remoteIP, msg);
 						} // TODO optimize refactor
 					} else {
 						Platform.AssertFailed($"Expecting endpoint of type {nameof(IPEndPoint)}, but was given {remoteEP.GetType()}.");
@@ -112,10 +110,6 @@ namespace GGPort {
 			public readonly int bytes_sent;
 			public readonly int packets_sent;
 			public readonly float kbps_sent;
-		}
-
-		public interface ICallbacks {
-			void OnMsg(IPEndPoint from, PeerMessage msg);
 		}
 	}
 }

@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace GGPort {
 	public static class LogUtil {
-		public static event SessionCallbacks.LogDelegate LogCallback;
+		public static event Session.LogTextDelegate LogEvent;
 
 		private static FileStream logFileStream;
 		private static long start;
@@ -77,7 +77,7 @@ namespace GGPort {
 			}
 
 			toWrite += msg;
-			LogCallback?.Invoke(toWrite);
+			LogEvent?.Invoke(toWrite);
 			byte[] buffer = Encoding.UTF8.GetBytes(toWrite);
 
 			fp.Write(buffer, 0, buffer.Length);

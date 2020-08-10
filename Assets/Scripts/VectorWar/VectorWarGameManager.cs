@@ -69,7 +69,7 @@ namespace VectorWar {
 			if (!started) { return; }
 			
 			if (Input.GetKeyUp(KeyCode.P)) {
-				PerfMon.ggpoutil_perfmon_toggle();
+				PerfMon<GameState>.ggpoutil_perfmon_toggle();
 			} else if (Input.GetKeyUp(KeyCode.Escape)) {
 				VectorWar.Exit();
 				Application.Quit();

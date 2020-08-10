@@ -4,98 +4,33 @@ using System.Net;
 namespace GGPort {
 	public abstract class Session {
 		/*
-		* Used to being a new GGPO.net session.  The ggpo object returned by ggpo_start_session
-		* uniquely identifies the state for this session and should be passed to all other
-		* functions.
-		*
-		* session - An out parameter to the new ggpo session object.
-		*
-		* cb - A GGPOSessionCallbacks structure which contains the callbacks you implement
-		* to help GGPO.net synchronize the two games.  You must implement all functions in
-		* cb, even if they do nothing but 'return true';
-		*
-		* game - The name of the game.  This is used internally for GGPO for logging purposes only.
-		*
-		* num_players - The number of players which will be in this game.  The number of players
-		* per session is fixed.  If you need to change the number of players or any player
-		* disconnects, you must start a new session.
-		*
-		* input_size - The size of the game inputs which will be passsed to ggpo_add_local_input.
-		*
-		* local_port - The port GGPO should bind to for UDP traffic.
+		* begin_game callback - This callback has been deprecated.  You must
+		* implement it, but should ignore the 'game' parameter.
 		*/
-		public static ErrorCode StartSession(out Session session, SessionCallbacks sessionCallbacks, string gameName, int numPlayers, int inputSize, ushort localPort) {
-			session = new PeerToPeerBackend(sessionCallbacks, gameName, localPort, numPlayers, inputSize);
-			return ErrorCode.Success;
-		}
-
+		public delegate bool BeginGameDelegate(string game);
+		protected BeginGameDelegate BeginGameEvent { get; set; }
+		
 		/*
-		* Used to being a new GGPO.net sync test session.  During a sync test, every
-		* frame of execution is run twice: once in prediction mode and once again to
-		* verify the result of the prediction.  If the checksums of your save states
-		* do not match, the test is aborted.
+		* advance_frame - Called during a rollback.  You should advance your game
+		* state by exactly one frame.  Before each frame, call ggpo_synchronize_input
+		* to retrieve the inputs you should use for that frame.  After each frame,
+		* you should call ggpo_advance_frame to notify GGPO.net that you're
+		* finished.
 		*
-		* cb - A GGPOSessionCallbacks structure which contains the callbacks you implement
-		* to help GGPO.net synchronize the two games.  You must implement all functions in
-		* cb, even if they do nothing but 'return true';
-		*
-		* game - The name of the game.  This is used internally for GGPO for logging purposes only.
-		*
-		* num_players - The number of players which will be in this game.  The number of players
-		* per session is fixed.  If you need to change the number of players or any player
-		* disconnects, you must start a new session.
-		*
-		* input_size - The size of the game inputs which will be passsed to ggpo_add_local_input.
-		*
-		* frames - The number of frames to run before verifying the prediction.  The
-		* recommended value is 1.
+		* The flags parameter is reserved.  It can safely be ignored at this time.
 		*/
-		public static ErrorCode StartSyncTest(
-			out Session session,
-			ref SessionCallbacks sessionCallbacks,
-			string gameName,
-			int numPlayers,
-			int inputSize, // TODO remove?
-			int frames
-		) {
-			session = new SyncTestBackend(ref sessionCallbacks, gameName, frames, numPlayers); // TODO was this in the C++?
-			return ErrorCode.Success;
-		}
+		public delegate bool AdvanceFrameDelegate(int flags);
+		protected AdvanceFrameDelegate AdvanceFrameEvent { get; set; }
+		
+		/* 
+		* on_event - Notification that something has happened.  See the GGPOEventCode
+		* structure above for more information.
+		*/
+		public delegate bool OnEventDelegate(Event info);
+		protected OnEventDelegate OnEventEvent { get; set; }
 
-		/*
-		* Start a spectator session.
-		*
-		* cb - A GGPOSessionCallbacks structure which contains the callbacks you implement
-		* to help GGPO.net synchronize the two games.  You must implement all functions in
-		* cb, even if they do nothing but 'return true';
-		*
-		* game - The name of the game.  This is used internally for GGPO for logging purposes only.
-		*
-		* num_players - The number of players which will be in this game.  The number of players
-		* per session is fixed.  If you need to change the number of players or any player
-		* disconnects, you must start a new session.
-		*
-		* input_size - The size of the game inputs which will be passsed to ggpo_add_local_input.
-		*
-		* local_port - The port GGPO should bind to for UDP traffic.
-		*
-		* host_ip - The IP address of the host who will serve you the inputs for the game.  Any
-		* player partcipating in the session can serve as a host.
-		*
-		* host_port - The port of the session on the host
-		*/
-		public static ErrorCode StartSpectating(
-			out Session session,
-			SessionCallbacks sessionCallbacks,
-			string gameName,
-			int numPlayers,
-			int inputSize,
-			ushort localPort,
-			IPEndPoint hostEndPoint
-		) {
-			session = new SpectatorBackend(sessionCallbacks, gameName, localPort, numPlayers, inputSize, hostEndPoint);
-			return ErrorCode.Success;
-		}
+		public delegate void LogTextDelegate(string message);
+		protected LogTextDelegate LogTextEvent { get; set; }
 		
 		/*
 		* Should be called periodically by your application to give GGPO.net
@@ -216,6 +151,223 @@ namespace GGPort {
 		* free the resources allocated in ggpo_start_session.
 		*/
 		public virtual ErrorCode CloseSession() {
+			return ErrorCode.Success;
+		}
+	}
+	
+	public abstract class Session<TGameState> : Session {
+		protected Session(
+			BeginGameDelegate beginGameCallback,
+			SaveGameStateDelegate saveGameStateCallback,
+			LoadGameStateDelegate loadGameStateCallback,
+			LogGameStateDelegate logGameStateCallback,
+			FreeBufferDelegate freeBufferCallback,
+			AdvanceFrameDelegate advanceFrameCallback,
+			OnEventDelegate onEventCallback,
+			LogTextDelegate logTextCallback
+		) {
+			BeginGameEvent = beginGameCallback;
+			SaveGameStateEvent = saveGameStateCallback;
+			LoadGameStateEvent = loadGameStateCallback;
+			LogGameStateEvent = logGameStateCallback;
+			FreeBufferEvent = freeBufferCallback;
+			AdvanceFrameEvent = advanceFrameCallback;
+			OnEventEvent = onEventCallback;
+			LogTextEvent = logTextCallback;
+		}
+
+		/*
+		* save_game_state - The client should allocate a buffer, copy the
+		* entire contents of the current game state into it, and copy the
+		* length into the *len parameter.  Optionally, the client can compute
+		* a checksum of the data and store it in the *checksum argument.
+		*/
+		public delegate bool SaveGameStateDelegate(out TGameState gameState, out int checksum, int frame);
+		private SaveGameStateDelegate SaveGameStateEvent { get; set; }
+
+		/*
+		* load_game_state - GGPO.net will call this function at the beginning
+		* of a rollback.  The buffer and len parameters contain a previously
+		* saved state returned from the save_game_state function.  The client
+		* should make the current game state match the state contained in the
+		* buffer.
+		*/
+		public delegate bool LoadGameStateDelegate(TGameState gameState);
+		private LoadGameStateDelegate LoadGameStateEvent { get; set; }
+
+		/*
+		* log_game_state - Used in diagnostic testing.  The client should use
+		* the ggpo_log function to write the contents of the specified save
+		* state in a human readable form.
+		*/
+		public delegate bool LogGameStateDelegate(string filename, TGameState gameState);
+		protected LogGameStateDelegate LogGameStateEvent { get; set; }
+
+		/*
+		* free_buffer - Frees a game state allocated in save_game_state.  You
+		* should deallocate the memory contained in the buffer.
+		*/
+		public delegate void FreeBufferDelegate(TGameState gameState);
+		private FreeBufferDelegate FreeBufferEvent { get; set; }
+
+		/*
+		* Used to being a new GGPO.net session.  The ggpo object returned by ggpo_start_session
+		* uniquely identifies the state for this session and should be passed to all other
+		* functions.
+		*
+		* session - An out parameter to the new ggpo session object.
+		*
+		* cb - A GGPOSessionCallbacks structure which contains the callbacks you implement
+		* to help GGPO.net synchronize the two games.  You must implement all functions in
+		* cb, even if they do nothing but 'return true';
+		*
+		* game - The name of the game.  This is used internally for GGPO for logging purposes only.
+		*
+		* num_players - The number of players which will be in this game.  The number of players
+		* per session is fixed.  If you need to change the number of players or any player
+		* disconnects, you must start a new session.
+		*
+		* input_size - The size of the game inputs which will be passsed to ggpo_add_local_input.
+		*
+		* local_port - The port GGPO should bind to for UDP traffic.
+		*/
+		public static ErrorCode StartSession(
+			out Session<TGameState> session,
+			BeginGameDelegate beginGameCallback,
+			SaveGameStateDelegate saveGameStateCallback,
+			LoadGameStateDelegate loadGameStateCallback,
+			LogGameStateDelegate logGameStateCallback,
+			FreeBufferDelegate freeBufferCallback,
+			AdvanceFrameDelegate advanceFrameCallback,
+			OnEventDelegate onEventCallback,
+			LogTextDelegate logTextCallback,
+			string gameName,
+			int numPlayers,
+			int inputSize,
+			ushort localPort
+		) {
+			session = new PeerToPeerBackend<TGameState>(
+				beginGameCallback,
+				saveGameStateCallback,
+				loadGameStateCallback,
+				logGameStateCallback,
+				freeBufferCallback,
+				advanceFrameCallback,
+				onEventCallback,
+				logTextCallback,
+				gameName,
+				localPort,
+				numPlayers,
+				inputSize
+			);
+			return ErrorCode.Success;
+		}
+
+		/*
+		* Used to being a new GGPO.net sync test session.  During a sync test, every
+		* frame of execution is run twice: once in prediction mode and once again to
+		* verify the result of the prediction.  If the checksums of your save states
+		* do not match, the test is aborted.
+		*
+		* cb - A GGPOSessionCallbacks structure which contains the callbacks you implement
+		* to help GGPO.net synchronize the two games.  You must implement all functions in
+		* cb, even if they do nothing but 'return true';
+		*
+		* game - The name of the game.  This is used internally for GGPO for logging purposes only.
+		*
+		* num_players - The number of players which will be in this game.  The number of players
+		* per session is fixed.  If you need to change the number of players or any player
+		* disconnects, you must start a new session.
+		*
+		* input_size - The size of the game inputs which will be passsed to ggpo_add_local_input.
+		*
+		* frames - The number of frames to run before verifying the prediction.  The
+		* recommended value is 1.
+		*/
+		public static ErrorCode StartSyncTest(
+			out Session<TGameState> session,
+			BeginGameDelegate beginGameCallback,
+			SaveGameStateDelegate saveGameStateCallback,
+			LoadGameStateDelegate loadGameStateCallback,
+			LogGameStateDelegate logGameStateCallback,
+			FreeBufferDelegate freeBufferCallback,
+			AdvanceFrameDelegate advanceFrameCallback,
+			OnEventDelegate onEventCallback,
+			LogTextDelegate logTextCallback,
+			string gameName,
+			int numPlayers,
+			int inputSize, // TODO remove?
+			int frames
+		) {
+			session = new SyncTestBackend<TGameState>(
+				beginGameCallback,
+				saveGameStateCallback,
+				loadGameStateCallback,
+				logGameStateCallback,
+				freeBufferCallback,
+				advanceFrameCallback,
+				onEventCallback,
+				logTextCallback,
+				gameName,
+				frames,
+				numPlayers
+			); // TODO was this in the C++?
+			return ErrorCode.Success;
+		}
+
+		/*
+		* Start a spectator session.
+		*
+		* cb - A GGPOSessionCallbacks structure which contains the callbacks you implement
+		* to help GGPO.net synchronize the two games.  You must implement all functions in
+		* cb, even if they do nothing but 'return true';
+		*
+		* game - The name of the game.  This is used internally for GGPO for logging purposes only.
+		*
+		* num_players - The number of players which will be in this game.  The number of players
+		* per session is fixed.  If you need to change the number of players or any player
+		* disconnects, you must start a new session.
+		*
+		* input_size - The size of the game inputs which will be passsed to ggpo_add_local_input.
+		*
+		* local_port - The port GGPO should bind to for UDP traffic.
+		*
+		* host_ip - The IP address of the host who will serve you the inputs for the game.  Any
+		* player participating in the session can serve as a host.
+		*
+		* host_port - The port of the session on the host
+		*/
+		public static ErrorCode StartSpectating(
+			out Session<TGameState> session,
+			BeginGameDelegate beginGameCallback,
+			SaveGameStateDelegate saveGameStateCallback,
+			LoadGameStateDelegate loadGameStateCallback,
+			LogGameStateDelegate logGameStateCallback,
+			FreeBufferDelegate freeBufferCallback,
+			AdvanceFrameDelegate advanceFrameCallback,
+			OnEventDelegate onEventCallback,
+			LogTextDelegate logTextCallback,
+			string gameName,
+			int numPlayers,
+			int inputSize,
+			ushort localPort,
+			IPEndPoint hostEndPoint
+		) {
+			session = new SpectatorBackend<TGameState>(
+				beginGameCallback,
+				saveGameStateCallback,
+				loadGameStateCallback,
+				logGameStateCallback,
+				freeBufferCallback,
+				advanceFrameCallback,
+				onEventCallback,
+				logTextCallback,
+				gameName,
+				localPort,
+				numPlayers,
+				inputSize,
+				hostEndPoint
+			);
 			return ErrorCode.Success;
 		}
 	}
