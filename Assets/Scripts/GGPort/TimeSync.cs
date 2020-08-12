@@ -32,9 +32,9 @@ namespace GGPort {
 
 		public void AdvanceFrame(GameInput input, int advantage, int remoteAdvantage) {
 			// Remember the last frame and frame advantage
-			lastInputs[input.Frame % lastInputs.Length] = input;
-			local[input.Frame % local.Length] = advantage;
-			remote[input.Frame % remote.Length] = remoteAdvantage;
+			lastInputs[input.frame % lastInputs.Length] = input;
+			local[input.frame % local.Length] = advantage;
+			remote[input.frame % remote.Length] = remoteAdvantage;
 		}
 
 		public int recommend_frame_wait_duration(bool require_idle_input) {

@@ -9,7 +9,7 @@ namespace VectorWar {
 		public const int SHIP_TUCK = 3;
 		public const float SHIP_THRUST = 0.06f;
 		public const float SHIP_MAX_THRUST = 4.0f;
-		public const float SHIP_BREAK_SPEED = 0.6f;
+		public const float SHIP_BRAKE_SPEED = 0.6f;
 		public const int ROTATE_INCREMENT = 3;
 		public const int MAX_BULLETS = 30;
 
@@ -20,8 +20,26 @@ namespace VectorWar {
 		public int health;
 		public int speed;
 		public int cooldown;
-		public Bullet[] bullets = new Bullet[MAX_BULLETS];
 		public int score;
+		public Bullet[] bullets = new Bullet[MAX_BULLETS];
+
+		public Ship() { }
+
+		public Ship(Ship other) {
+			position = other.position;
+			velocity = other.velocity;
+			radius = other.radius;
+			heading = other.heading;
+			health = other.health;
+			speed = other.speed;
+			cooldown = other.cooldown;
+			score = other.score;
+			
+			bullets = new Bullet[MAX_BULLETS];
+			for (int i = 0; i < MAX_BULLETS; i++) {
+				bullets[i] = other.bullets[i];
+			} 
+		}
 
 		public static unsafe int Size() {
 			return

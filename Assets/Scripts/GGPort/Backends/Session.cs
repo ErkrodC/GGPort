@@ -8,7 +8,7 @@ namespace GGPort {
 		* implement it, but should ignore the 'game' parameter.
 		*/
 		public delegate bool BeginGameDelegate(string game);
-		protected BeginGameDelegate BeginGameEvent { get; set; }
+		protected BeginGameDelegate beginGameEvent { get; set; }
 		
 		/*
 		* advance_frame - Called during a rollback.  You should advance your game
@@ -20,17 +20,17 @@ namespace GGPort {
 		* The flags parameter is reserved.  It can safely be ignored at this time.
 		*/
 		public delegate bool AdvanceFrameDelegate(int flags);
-		protected AdvanceFrameDelegate AdvanceFrameEvent { get; set; }
+		protected AdvanceFrameDelegate advanceFrameEvent { get; set; }
 		
 		/* 
 		* on_event - Notification that something has happened.  See the GGPOEventCode
 		* structure above for more information.
 		*/
 		public delegate bool OnEventDelegate(Event info);
-		protected OnEventDelegate OnEventEvent { get; set; }
+		protected OnEventDelegate onEventEvent { get; set; }
 
 		public delegate void LogTextDelegate(string message);
-		protected LogTextDelegate LogTextEvent { get; set; }
+		protected LogTextDelegate logTextEvent { get; set; }
 		
 		/*
 		* Should be called periodically by your application to give GGPO.net
@@ -166,14 +166,14 @@ namespace GGPort {
 			OnEventDelegate onEventCallback,
 			LogTextDelegate logTextCallback
 		) {
-			BeginGameEvent = beginGameCallback;
-			SaveGameStateEvent = saveGameStateCallback;
-			LoadGameStateEvent = loadGameStateCallback;
-			LogGameStateEvent = logGameStateCallback;
-			FreeBufferEvent = freeBufferCallback;
-			AdvanceFrameEvent = advanceFrameCallback;
-			OnEventEvent = onEventCallback;
-			LogTextEvent = logTextCallback;
+			beginGameEvent += beginGameCallback;
+			saveGameStateEvent += saveGameStateCallback;
+			loadGameStateEvent += loadGameStateCallback;
+			logGameStateEvent += logGameStateCallback;
+			freeBufferEvent += freeBufferCallback;
+			advanceFrameEvent += advanceFrameCallback;
+			onEventEvent += onEventCallback;
+			logTextEvent += logTextCallback;
 		}
 
 		/*
@@ -183,7 +183,7 @@ namespace GGPort {
 		* a checksum of the data and store it in the *checksum argument.
 		*/
 		public delegate bool SaveGameStateDelegate(out TGameState gameState, out int checksum, int frame);
-		private SaveGameStateDelegate SaveGameStateEvent { get; set; }
+		protected SaveGameStateDelegate saveGameStateEvent { get; set; }
 
 		/*
 		* load_game_state - GGPO.net will call this function at the beginning
@@ -193,7 +193,7 @@ namespace GGPort {
 		* buffer.
 		*/
 		public delegate bool LoadGameStateDelegate(TGameState gameState);
-		private LoadGameStateDelegate LoadGameStateEvent { get; set; }
+		protected LoadGameStateDelegate loadGameStateEvent { get; set; }
 
 		/*
 		* log_game_state - Used in diagnostic testing.  The client should use
@@ -201,14 +201,14 @@ namespace GGPort {
 		* state in a human readable form.
 		*/
 		public delegate bool LogGameStateDelegate(string filename, TGameState gameState);
-		protected LogGameStateDelegate LogGameStateEvent { get; set; }
+		protected LogGameStateDelegate logGameStateEvent { get; set; }
 
 		/*
 		* free_buffer - Frees a game state allocated in save_game_state.  You
 		* should deallocate the memory contained in the buffer.
 		*/
 		public delegate void FreeBufferDelegate(TGameState gameState);
-		private FreeBufferDelegate FreeBufferEvent { get; set; }
+		protected FreeBufferDelegate freeBufferEvent { get; set; }
 
 		/*
 		* Used to being a new GGPO.net session.  The ggpo object returned by ggpo_start_session

@@ -16,20 +16,18 @@ namespace GGPort {
 	public class Transport : IPollSink {
 		public const int MAX_UDP_ENDPOINTS = 16;
 		// TODO readdress serialization, no need for type data to be sent with custom protocol
-		private const int MAX_UDP_PACKET_SIZE = /*4096*/ 4096 * 2;
+		private const int m_MAX_UDP_PACKET_SIZE = /*4096*/ 4096 * 2;
+		
+		public event Action<IPEndPoint, PeerMessage> messageReceivedEvent;
 		
 		// Network transmission information
 		private Socket m_socket;
-
-		// state management
-		private readonly Action<IPEndPoint, PeerMessage> m_onMessageReceived;
 
 		private static void Log(string msg) {
 			LogUtil.Log($"{nameof(Transport)} | {msg}");
 		}
 
-		public Transport(ushort port, Poll poll, Action<IPEndPoint, PeerMessage> onMessageReceived) {
-			m_onMessageReceived = onMessageReceived;
+		public Transport(ushort port, Poll poll) {
 			poll.RegisterLoop(this);
 
 			Log($"binding udp socket to port {port}.{Environment.NewLine}");
@@ -42,7 +40,8 @@ namespace GGPort {
 		}
 	   
 		public int SendTo(byte[] buffer, int len, SocketFlags flags, IPEndPoint dst) {
-			int sentBytes = 0;
+			int sentBytes;
+			
 			try {
 				sentBytes = m_socket.SendTo(buffer, len, flags, dst);
 				Log($"sent packet length {len} to {dst.Address}:{dst.Port} (ret:{sentBytes}).{Environment.NewLine}");
@@ -55,21 +54,21 @@ namespace GGPort {
 		}
 
 		public bool OnLoopPoll(object cookie) {
-			byte[] receiveBuffer = new byte[MAX_UDP_PACKET_SIZE];
+			byte[] receiveBuffer = new byte[m_MAX_UDP_PACKET_SIZE];
 
 			EndPoint remoteEP = new IPEndPoint(IPAddress.Any, 0);
 			
 			for (;;) {
 				try {
 					if (m_socket.Available == 0) { break; }
-					int len = m_socket.ReceiveFrom(receiveBuffer, MAX_UDP_PACKET_SIZE, SocketFlags.None, ref remoteEP);
+					int len = m_socket.ReceiveFrom(receiveBuffer, m_MAX_UDP_PACKET_SIZE, SocketFlags.None, ref remoteEP);
 
 					if (remoteEP is IPEndPoint remoteIP) {
 						Log($"recvfrom returned (len:{len}  from:{remoteIP.Address}:{remoteIP.Port}).{Environment.NewLine}");
 						IFormatter br = new BinaryFormatter();
 						using (MemoryStream ms = new MemoryStream(receiveBuffer)) {
 							PeerMessage msg = (PeerMessage) br.Deserialize(ms); // TODO deserialization probably doesn't work? why does it work for syncing but not input?
-							m_onMessageReceived?.Invoke(remoteIP, msg);
+							messageReceivedEvent?.Invoke(remoteIP, msg);
 						} // TODO optimize refactor
 					} else {
 						Platform.AssertFailed($"Expecting endpoint of type {nameof(IPEndPoint)}, but was given {remoteEP.GetType()}.");

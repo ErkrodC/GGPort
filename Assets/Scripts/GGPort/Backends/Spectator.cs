@@ -52,11 +52,12 @@ namespace GGPort {
 			m_isSynchronizing = true;
 
 			m_inputs = new GameInput[SPECTATOR_FRAME_BUFFER_SIZE];
-			for (int i = 0; i < m_inputs.Length; i++) { m_inputs[i].Frame = -1; }
+			for (int i = 0; i < m_inputs.Length; i++) { m_inputs[i].frame = -1; }
 
 			// Initialize the UDP port
 			m_poll = new Poll();
-			m_transport = new Transport(localPort, m_poll, OnMessageReceived);
+			m_transport = new Transport(localPort, m_poll);
+			m_transport.messageReceivedEvent += OnMessageReceived;
 
 			// Init the host endpoint
 			m_host = new Peer();
@@ -64,7 +65,7 @@ namespace GGPort {
 			m_host.Synchronize();
 
 			// Preload the ROM
-			BeginGameEvent?.Invoke(gameName);
+			beginGameEvent?.Invoke(gameName);
 		}
 
 		public override ErrorCode Idle(int timeout) {
@@ -90,11 +91,11 @@ namespace GGPort {
 			}
 
 			GameInput input = m_inputs[m_nextInputToSend % SPECTATOR_FRAME_BUFFER_SIZE];
-			if (input.Frame < m_nextInputToSend) {
+			if (input.frame < m_nextInputToSend) {
 				// Haven't received the input from the host yet.  Wait
 				return ErrorCode.PredictionThreshold;
 			}
-			if (input.Frame > m_nextInputToSend) {
+			if (input.frame > m_nextInputToSend) {
 				// The host is way way way far ahead of the spectator.  How'd this
 				// happen?  Anyway, the input we need is gone forever.
 				return ErrorCode.GeneralFailure;
@@ -104,7 +105,7 @@ namespace GGPort {
 
 			int valuesSizeInBytes = m_inputSize * m_numPlayers;
 			for (int i = 0; i < valuesSizeInBytes; i++) {
-				Buffer.SetByte(values, i, input.Bits[i]);
+				Buffer.SetByte(values, i, input.bits[i]);
 			}
 			
 			disconnectFlags = 0; // xxx: should get them from the host!
@@ -146,8 +147,8 @@ namespace GGPort {
 		}
 
 		public virtual void OnMessageReceived(IPEndPoint from, PeerMessage msg) {
-			if (m_host.HandlesMsg(from)) {
-				m_host.OnMsg(msg);
+			if (m_host.DoesHandleMessageFromEndPoint(from)) {
+				m_host.OnMessageReceived(msg);
 			}
 		}
 
@@ -164,7 +165,7 @@ namespace GGPort {
 				case Peer.Event.Type.Connected: {
 					info.code = EventCode.ConnectedToPeer;
 					info.connected.player = new PlayerHandle(0);
-					OnEventEvent?.Invoke(info);
+					onEventEvent?.Invoke(info);
 					break;
 				}
 				case Peer.Event.Type.Synchronizing: {
@@ -172,17 +173,17 @@ namespace GGPort {
 					info.synchronizing.player = new PlayerHandle(0);
 					info.synchronizing.count = evt.synchronizing.Count;
 					info.synchronizing.total = evt.synchronizing.Total;
-					OnEventEvent?.Invoke(info);
+					onEventEvent?.Invoke(info);
 					break;
 				}
 				case Peer.Event.Type.Synchronized: {
 					if (m_isSynchronizing) {
 						info.code = EventCode.SynchronizedWithPeer;
 						info.synchronized.player = new PlayerHandle(0);
-						OnEventEvent?.Invoke(info);
+						onEventEvent?.Invoke(info);
 
 						info.code = EventCode.Running;
-						OnEventEvent?.Invoke(info);
+						onEventEvent?.Invoke(info);
 						m_isSynchronizing = false;
 					}
 					break;
@@ -191,27 +192,27 @@ namespace GGPort {
 					info.code = EventCode.ConnectionInterrupted;
 					info.connectionInterrupted.player = new PlayerHandle(0);
 					info.connectionInterrupted.disconnect_timeout = evt.network_interrupted.DisconnectTimeout;
-					OnEventEvent?.Invoke(info);
+					onEventEvent?.Invoke(info);
 					break;
 				}
 				case Peer.Event.Type.NetworkResumed: {
 					info.code = EventCode.ConnectionResumed;
 					info.connectionResumed.player = new PlayerHandle(0);
-					OnEventEvent?.Invoke(info);
+					onEventEvent?.Invoke(info);
 					break;
 				}
 				case Peer.Event.Type.Disconnected: {
 					info.code = EventCode.DisconnectedFromPeer;
 					info.disconnected.player = new PlayerHandle(0);
-					OnEventEvent?.Invoke(info);
+					onEventEvent?.Invoke(info);
 					break;
 				}
 				case Peer.Event.Type.Input: {
 					GameInput input = evt.input;
 
-					m_host.SetLocalFrameNumber(input.Frame);
+					m_host.SetLocalFrameNumber(input.frame);
 					m_host.SendInputAck();
-					m_inputs[input.Frame % SPECTATOR_FRAME_BUFFER_SIZE] = input;
+					m_inputs[input.frame % SPECTATOR_FRAME_BUFFER_SIZE] = input;
 					break;
 				}
 			}

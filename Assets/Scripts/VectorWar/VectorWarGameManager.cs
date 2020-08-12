@@ -85,7 +85,7 @@ namespace VectorWar {
 			now = Platform.GetCurrentTimeMS();
 			VectorWar.Idle((int) Math.Max(0, next - now - 1));
 			if (now >= next) {
-				VectorWar.RunFrame(); 
+				VectorWar.RunFrame();
 				next = now + (1000 / 60);
 			}
 		}

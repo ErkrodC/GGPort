@@ -13,8 +13,8 @@ namespace GGPort {
 	// TODO separate out into smaller derived classes, this used to be a union.
 	[Serializable, StructLayout(LayoutKind.Explicit)]
 	public struct PeerMessage {
-		public const ushort kMaxCompressedBits = 4096;
-		public const byte kMaxPlayers = 4; // TODO probably doesn't belong in this class, i.e. used in a lot of places
+		public const ushort MAX_COMPRESSED_BITS = 4096;
+		public const byte MAX_PLAYERS = 4; // TODO probably doesn't belong in this class, i.e. used in a lot of places
 		
 		[FieldOffset(0)] public Header header;
 		[FieldOffset(5)] public SyncRequest syncRequest;
@@ -39,8 +39,8 @@ namespace GGPort {
 		
 		[Serializable]
 		public struct Header {
-			public ushort MagicNumber { get; set; }
-			public ushort SequenceNumber { get; set; }
+			public ushort magicNumber;
+			public ushort sequenceNumber;
 			public MsgType type; // packet type
 		}
 		
@@ -75,9 +75,9 @@ namespace GGPort {
 			public ushort numBits;
 			public byte inputSize;  // XXX: shouldn't be in every single packet!
 			
-			private fixed bool peerDisconnectedFlags[kMaxPlayers];
-			private fixed int peerLastFrames[kMaxPlayers];
-			public fixed byte bits[kMaxCompressedBits]; /* must be last */ // TODO why?
+			private fixed bool peerDisconnectedFlags[MAX_PLAYERS];
+			private fixed int peerLastFrames[MAX_PLAYERS];
+			public fixed byte bits[MAX_COMPRESSED_BITS]; /* must be last */ // TODO why?
 
 			public Input(SerializationInfo info, StreamingContext context) : this() {
 				startFrame = info.GetInt32(nameof(startFrame));
@@ -90,35 +90,28 @@ namespace GGPort {
 				bool[] peerDisconnectedFlagsArray = info.GetValue(nameof(peerDisconnectedFlags), typeof(bool[])) as bool[];
 				int[] peerLastFramesArray = info.GetValue(nameof(peerLastFrames), typeof(int[])) as int[];
 
-				for (int i = 0; i < kMaxPlayers; i++) {
+				for (int i = 0; i < MAX_PLAYERS; i++) {
 					peerDisconnectedFlags[i] = peerDisconnectedFlagsArray[i];
 					peerLastFrames[i] = peerLastFramesArray[i];
 				}
 
 				// deserialize bits
 				byte[] bitsArray = info.GetValue(nameof(bits), typeof(byte[])) as byte[];
-				for (int i = 0; i < kMaxCompressedBits; i++) {
+				for (int i = 0; i < MAX_COMPRESSED_BITS; i++) {
 					bits[i] = bitsArray[i];
 				}
 			}
 
-			public ConnectStatus GetPeerConnectStatus(int index) {
-				return new ConnectStatus {
-					IsDisconnected = peerDisconnectedFlags[index],
-					LastFrame = peerLastFrames[index]
-				};
-			}
-
 			public void SetPeerConnectStatus(int index, ConnectStatus peerConnectStatus) {
-				peerDisconnectedFlags[index] = peerConnectStatus.IsDisconnected;
-				peerLastFrames[index] = peerConnectStatus.LastFrame;
+				peerDisconnectedFlags[index] = peerConnectStatus.isDisconnected;
+				peerLastFrames[index] = peerConnectStatus.lastFrame;
 			}
 
 			public void GetConnectStatuses(ref ConnectStatus[] connectStatuses) {
-				for (int i = 0; i < kMaxPlayers; i++) {
+				for (int i = 0; i < MAX_PLAYERS; i++) {
 					connectStatuses[i] = new ConnectStatus {
-						IsDisconnected = peerDisconnectedFlags[i],
-						LastFrame = peerLastFrames[i]
+						isDisconnected = peerDisconnectedFlags[i],
+						lastFrame = peerLastFrames[i]
 					};
 				}
 			}
@@ -131,9 +124,9 @@ namespace GGPort {
 				info.AddValue(nameof(inputSize), inputSize);
 				
 				// serialize connect statuses
-				bool[] peerDisconnectedFlagsArray = new bool[kMaxPlayers];
-				int[] peerLastFramesArray = new int[kMaxPlayers];
-				for (int i = 0; i < kMaxPlayers; i++) {
+				bool[] peerDisconnectedFlagsArray = new bool[MAX_PLAYERS];
+				int[] peerLastFramesArray = new int[MAX_PLAYERS];
+				for (int i = 0; i < MAX_PLAYERS; i++) {
 					peerDisconnectedFlagsArray[i] = peerDisconnectedFlags[i];
 					peerLastFramesArray[i] = peerLastFrames[i];
 				}
@@ -142,8 +135,8 @@ namespace GGPort {
 				info.AddValue(nameof(peerLastFrames), peerLastFramesArray, typeof(int[]));
 				
 				// serialize bits
-				byte[] bitsArray = new byte[kMaxCompressedBits];
-				for (int i = 0; i < kMaxCompressedBits; i++) {
+				byte[] bitsArray = new byte[MAX_COMPRESSED_BITS];
+				for (int i = 0; i < MAX_COMPRESSED_BITS; i++) {
 					bitsArray[i] = bits[i];
 				}
 				
@@ -170,8 +163,8 @@ namespace GGPort {
 		
 		[Serializable]
 		public struct ConnectStatus {
-			public bool IsDisconnected;
-			public int LastFrame;
+			public bool isDisconnected;
+			public int lastFrame;
 		};
 	};
 }

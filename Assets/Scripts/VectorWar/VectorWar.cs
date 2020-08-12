@@ -12,7 +12,7 @@ using Event = GGPort.Event;
 namespace VectorWar {
 	// Interface to the vector war application.
 	public static class VectorWar {
-		public static event Session<GameState>.LogTextDelegate logTextEvent;
+		public static event Session.LogTextDelegate logTextEvent;
 		
 		private const int m_FRAME_DELAY = 0;
 		private const int m_MAX_PLAYERS = 64;
@@ -22,14 +22,14 @@ namespace VectorWar {
 		private static Session<GameState> ms_session;
 
 		[Flags]
-		public enum Input {
-			InputThrust = 1,
-			InputBreak = 1 << 1,
-			InputRotateLeft = 1 << 2,
-			InputRotateRight = 1 << 3,
-			InputFire = 1 << 4,
-			InputBomb = 1 << 5,
-		};
+		public enum ShipInput {
+			Thrust = 1,
+			Brake = 1 << 1,
+			Clockwise = 1 << 2,
+			CounterClockwise = 1 << 3,
+			Fire = 1 << 4,
+			Bomb = 1 << 5,
+		}
 
 		public static void Init(ushort localPort, int numPlayers, Player[] players, int numSpectators) {
 			// Initialize the game state
@@ -57,9 +57,9 @@ namespace VectorWar {
 #endif
 
 			// automatically disconnect clients after 3000 ms and start our count-down timer
-			// for disconnects after 1000 ms.   To completely disable disconnects, simply use
+			// for disconnects after 1000 ms. To completely disable disconnects, simply use
 			// a value of 0 for ggpo_set_disconnect_timeout.
-			ms_session.SetDisconnectTimeout(3000);
+			ms_session.SetDisconnectTimeout(0);
 			ms_session.SetDisconnectNotifyStart(1000);
 
 			int i;
@@ -139,9 +139,9 @@ namespace VectorWar {
 
 			// update the checksums to display in the top of the window.  this
 			// helps to detect desyncs.
-			ms_NON_GAME_STATE.Now.FrameNumber = ms_gameState.FrameNumber;
-			ms_NON_GAME_STATE.Now.Checksum = Fletcher32Checksum(ms_gameState.Serialize());
-			if (ms_gameState.FrameNumber % 90 == 0) {
+			ms_NON_GAME_STATE.Now.FrameNumber = ms_gameState.frameNumber;
+			ms_NON_GAME_STATE.Now.Checksum = ms_gameState.frameNumber; // ER TODO Fletcher32Checksum(ms_gameState.Serialize());
+			if (ms_gameState.frameNumber % 90 == 0) {
 				ms_NON_GAME_STATE.Periodic = ms_NON_GAME_STATE.Now;
 			}
 
@@ -165,23 +165,22 @@ namespace VectorWar {
 		* worry about player 2.  GGPO will handle remapping his inputs 
 		* transparently.
 		*/
-		public static int ReadInputs() {
-			Keybind[] inputtable = {
-				new Keybind{ keyCode = KeyCode.UpArrow, input = Input.InputThrust },
-				new Keybind{ keyCode = KeyCode.DownArrow, input = Input.InputBreak },
-				new Keybind{ keyCode = KeyCode.LeftArrow, input = Input.InputRotateLeft },
-				new Keybind{ keyCode = KeyCode.RightArrow, input = Input.InputRotateRight },
-				new Keybind{ keyCode = KeyCode.D, input = Input.InputFire },
-				new Keybind{ keyCode = KeyCode.S, input = Input.InputBomb }
-			};
-			
+		
+		private static readonly Keybind[] ms_KEY_BINDS = {
+			new Keybind{ keyCode = KeyCode.UpArrow, shipInput = ShipInput.Thrust },
+			new Keybind{ keyCode = KeyCode.DownArrow, shipInput = ShipInput.Brake },
+			new Keybind{ keyCode = KeyCode.LeftArrow, shipInput = ShipInput.Clockwise },
+			new Keybind{ keyCode = KeyCode.RightArrow, shipInput = ShipInput.CounterClockwise },
+			new Keybind{ keyCode = KeyCode.D, shipInput = ShipInput.Fire },
+			new Keybind{ keyCode = KeyCode.S, shipInput = ShipInput.Bomb }
+		};
+
+		private static int ReadInputs() {
 			int i, inputs = 0;
 			
-			for (i = 0; i < inputtable.Length; i++) {
-				if (UnityEngine.Input.GetKey(inputtable[i].keyCode)) {
-					inputs |= (int) inputtable[i].input;
-				} else if (inputtable[i].keyCode == KeyCode.LeftArrow) {
-					inputs |= (int) inputtable[i].input;
+			for (i = 0; i < ms_KEY_BINDS.Length; i++) {
+				if (Input.GetKey(ms_KEY_BINDS[i].keyCode)) {
+					inputs |= (int) ms_KEY_BINDS[i].shipInput;
 				}
 			}
    
@@ -190,12 +189,12 @@ namespace VectorWar {
 
 		// Run a single frame of the game.
 		private static readonly byte[] ms_SERIALIZED_INPUT = new byte[4];
+		private static readonly int[] ms_INPUTS = new int[GameState.MAX_SHIPS];
 		public static void RunFrame() {
 			ErrorCode result = ErrorCode.Success;
 			int disconnectFlags = 0;
-			int[] inputs = new int[GameState.kMaxShips];
 
-			for (int i = 0; i < inputs.Length; i++) { inputs[i] = 0; }
+			for (int i = 0; i < GameState.MAX_SHIPS; i++) { ms_INPUTS[i] = 0; }
 
 			if (ms_NON_GAME_STATE.LocalPlayerHandle.HandleValue != PlayerHandle.kInvalidHandle) {
 				int input = ReadInputs();
@@ -215,11 +214,11 @@ namespace VectorWar {
 			// ggpo will modify the input list with the correct inputs to use and
 			// return 1.
 			if (result.IsSuccess()) {
-				result = ms_session.SynchronizeInput(inputs, sizeof(int) * GameState.kMaxShips, ref disconnectFlags);
+				result = ms_session.SynchronizeInput(ms_INPUTS, sizeof(int) * GameState.MAX_SHIPS, ref disconnectFlags);
 				if (result.IsSuccess()) {
 					// inputs[0] and inputs[1] contain the inputs for p1 and p2.  Advance
 					// the game by 1 frame using those inputs.
-					AdvanceFrame(inputs, disconnectFlags);
+					AdvanceFrame(ms_INPUTS, disconnectFlags);
 				}
 			}
 
@@ -337,12 +336,12 @@ namespace VectorWar {
 		* during a rollback.
 		*/
 		public static bool OnAdvanceFrame(int flags) {
-			int[] inputs = new int[GameState.kMaxShips];
+			int[] inputs = new int[GameState.MAX_SHIPS];
 			int disconnectFlags = 0;
 
 			// Make sure we fetch new inputs from GGPO and use those to update
 			// the game state instead of reading from the keyboard.
-			ms_session.SynchronizeInput(inputs, sizeof(int) * GameState.kMaxShips, ref disconnectFlags);
+			ms_session.SynchronizeInput(inputs, sizeof(int) * GameState.MAX_SHIPS, ref disconnectFlags);
 			AdvanceFrame(inputs, disconnectFlags);
 			return true;
 		}
@@ -358,9 +357,9 @@ namespace VectorWar {
 		* buffer and len parameters.
 		*/
 		public static bool OnSaveGameState(out GameState gameState, out int checksum, int frame) {
-			gameState = ms_gameState;
-			ms_gameState.Serialize(ms_gameState.Size(), out byte[] buffer); // TODO probably a better way to get the checksum.
-			checksum = Fletcher32Checksum(buffer);
+			gameState = (GameState) ms_gameState.Clone();
+			//ms_gameState.Serialize(ms_gameState.Size(), out byte[] buffer); // TODO probably a better way to get the checksum.
+			checksum = ms_gameState.frameNumber;// ER TODO optional checksum: Fletcher32Checksum(buffer);
 			return true;
 		}
 		
@@ -369,11 +368,11 @@ namespace VectorWar {
 			FileStream fp = File.Open(filename, FileMode.OpenOrCreate, FileAccess.Write);
 			
 			StringBuilder stringBuilder = new StringBuilder($"GameState object.{Environment.NewLine}");
-			stringBuilder.Append($"  bounds: {gameState.Bounds.xMin},{gameState.Bounds.yMin} x {gameState.Bounds.xMax},{gameState.Bounds.yMax}.{Environment.NewLine}");
-			stringBuilder.Append($"  num_ships: {gameState.NumShips}.{Environment.NewLine}");
+			stringBuilder.Append($"  bounds: {gameState.bounds.xMin},{gameState.bounds.yMin} x {gameState.bounds.xMax},{gameState.bounds.yMax}.{Environment.NewLine}");
+			stringBuilder.Append($"  num_ships: {gameState.numShips}.{Environment.NewLine}");
 			
-			for (int i = 0; i < gameState.NumShips; i++) {
-				Ship ship = gameState.Ships[i];
+			for (int i = 0; i < gameState.numShips; i++) {
+				Ship ship = gameState.ships[i];
 				
 				stringBuilder.Append($"  ship {i} position:  {ship.position.x:F4}, {ship.position.y:F4}{Environment.NewLine}");
 				stringBuilder.Append($"  ship {i} velocity:  {ship.velocity.x:F4}, {ship.velocity.y:F4}{Environment.NewLine}");
@@ -403,7 +402,7 @@ namespace VectorWar {
 		
 		public struct Keybind {
 			public KeyCode keyCode;
-			public Input input;
+			public ShipInput shipInput;
 		}
 	}
 }

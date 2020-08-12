@@ -12,77 +12,77 @@ using System;
 
 namespace GGPort {
 	public unsafe struct GameInput {
-		public const int kMaxBytes = 9;
-		public const int kMaxPlayers = 2;
-		public const int kNullFrame = -1;
-		
-		public int Frame { get; set; } // TODO do props get copied on pass for val type?
-		public int Size { get; set; } /* size in bytes of the entire input for all players */
-		public fixed byte Bits[kMaxBytes * kMaxPlayers];
+		public const int MAX_BYTES = 9;
+		public const int MAX_PLAYERS = 2;
+		public const int NULL_FRAME = -1;
+
+		public int frame;
+		public int size; /* size in bytes of the entire input for all players */
+		public fixed byte bits[MAX_BYTES * MAX_PLAYERS];
 
 		public bool IsNull() {
-			return Frame == -1;
+			return frame == -1;
 		}
 
 		public bool this[int bitIndex] {
-			get => (Bits[bitIndex / 8] & 1 << bitIndex % 8) != 0;
+			get => (bits[bitIndex / 8] & (1 << (bitIndex % 8))) != 0;
 			set {
 				if (value) {
-					Bits[bitIndex/8] |= (byte) (1 << bitIndex % 8);
+					bits[bitIndex / 8] |= (byte) (1 << (bitIndex % 8));
 				} else {
-					Bits[bitIndex / 8] &= (byte) ~(1 << bitIndex % 8);
+					bits[bitIndex / 8] &= (byte) ~(1 << (bitIndex % 8));
 				}
 			}
 		}
 
 		public void Init(int frame, byte[] bits, int size, int offset) {
-			Platform.Assert(0 < size && size <= kMaxBytes);
+			Platform.Assert(0 < size && size <= MAX_BYTES);
 			
-			Frame = frame;
-			Size = size;
+			this.frame = frame;
+			this.size = size;
 
-			const int kSizeOfBits = kMaxBytes * kMaxPlayers;
-			for (int i = 0; i < kSizeOfBits; i++) { Bits[i] = 0; }
+			const int kSizeOfBits = MAX_BYTES * MAX_PLAYERS;
+			for (int i = 0; i < kSizeOfBits; i++) { this.bits[i] = 0; }
 
 			if (bits == null) { return; }
 
 			int startOffset = offset * size;
 			for (int i = 0; i < size; i++) {
-				Bits[startOffset + i] = bits[i];
+				this.bits[startOffset + i] = bits[i];
 			}
 		}
 
 		public void Init(int frame, byte[] bits, int size) {
-			Platform.Assert(0 < size && size <= kMaxBytes);
+			Platform.Assert(0 < size && size <= MAX_BYTES);
 			
-			Frame = frame;
-			Size = size;
+			this.frame = frame;
+			this.size = size;
 
-			const int kSizeOfBits = kMaxBytes * kMaxPlayers;
+			const int kSizeOfBits = MAX_BYTES * MAX_PLAYERS;
 			for (int i = 0; i < kSizeOfBits; i++) {
-				Bits[i] = 0;
+				this.bits[i] = 0;
 			}
 			
 			if (bits != null) {
 				for (int i = 0; i < size; i++) {
-					Bits[i] = bits[i];
+					this.bits[i] = bits[i];
 				}
 			}
 		}
 
 		public void Erase() {
-			const int kSizeOfBits = kMaxBytes * kMaxPlayers;
+			const int kSizeOfBits = MAX_BYTES * MAX_PLAYERS;
 			for (int i = 0; i < kSizeOfBits; i++) {
-				Bits[i] = 0;
+				bits[i] = 0;
 			}
 		}
 
 		public string Desc(bool showFrame = true) {
-			Platform.Assert(Size != 0);
+			Platform.Assert(size != 0);
 			
-			string result = $"({(showFrame ? $"frame:{Frame} " : "")}size:{Size} ";
+			string result = $"({(showFrame ? $"frame:{frame} " : "")}size:{size} ";
 
-			for (int i = 0; i < Size * 8; i++) {
+			for (int i = 0; i < size * 8; i++) {
 				result += $"{i:00} ";
 			}
 
@@ -96,17 +96,17 @@ namespace GGPort {
 		}
 
 		public bool Equal(GameInput other, bool bitsOnly = false) {
-			if (!bitsOnly && Frame != other.Frame) {
-				LogUtil.Log($"frames don't match: {Frame}, {other.Frame}{Environment.NewLine}");
+			if (!bitsOnly && frame != other.frame) {
+				LogUtil.Log($"frames don't match: {frame}, {other.frame}{Environment.NewLine}");
 			}
 			
-			if (Size != other.Size) {
-				LogUtil.Log($"sizes don't match: {Size}, {other.Size}{Environment.NewLine}");
+			if (size != other.size) {
+				LogUtil.Log($"sizes don't match: {size}, {other.size}{Environment.NewLine}");
 			}
 
 			bool bitsAreEqual = true;
-			for (int i = 0; i < Size; i++) {
-				if (Bits[i] == other.Bits[i]) { continue; }
+			for (int i = 0; i < size; i++) {
+				if (bits[i] == other.bits[i]) { continue; }
 
 				bitsAreEqual = false;
 				break;
@@ -114,10 +114,10 @@ namespace GGPort {
 			
 			if (!bitsAreEqual) { LogUtil.Log($"bits don't match{Environment.NewLine}"); }
 
-			Platform.Assert(Size != 0 && other.Size != 0);
+			Platform.Assert(size != 0 && other.size != 0);
 			
-			return (bitsOnly || Frame == other.Frame) &&
-			       Size == other.Size &&
+			return (bitsOnly || frame == other.frame) &&
+			       size == other.size &&
 			       bitsAreEqual;
 		}
 	};

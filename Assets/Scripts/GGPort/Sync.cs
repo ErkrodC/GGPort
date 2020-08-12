@@ -67,7 +67,7 @@ namespace GGPort {
 			
 			for (int i = 0; i < m_numPlayers; i++) {
 				GameInput input = new GameInput();
-				if (m_localConnectStatuses[i].IsDisconnected && frame > m_localConnectStatuses[i].LastFrame) {
+				if (m_localConnectStatuses[i].isDisconnected && frame > m_localConnectStatuses[i].lastFrame) {
 					disconnectFlags |= (1 << i);
 					input.Erase();
 				} else {
@@ -76,7 +76,7 @@ namespace GGPort {
 
 				int startingByteIndex = i * m_inputSize;
 				for (int j = 0; j < m_inputSize; j++) {
-					values[startingByteIndex + j] = input.Bits[j];
+					values[startingByteIndex + j] = input.bits[j];
 				}
 			}
 			return disconnectFlags;
@@ -94,7 +94,7 @@ namespace GGPort {
 			
 			for (int i = 0; i < m_numPlayers; i++) {
 				GameInput input = new GameInput();
-				if (m_localConnectStatuses[i].IsDisconnected && m_frameCount > m_localConnectStatuses[i].LastFrame) {
+				if (m_localConnectStatuses[i].isDisconnected && m_frameCount > m_localConnectStatuses[i].lastFrame) {
 					disconnectFlags |= (1 << i);
 					input.Erase();
 				} else {
@@ -103,7 +103,7 @@ namespace GGPort {
 				
 				int startingByteIndex = i * m_inputSize;
 				for (int j = 0; j < m_inputSize; j++) {
-					Buffer.SetByte(values, startingByteIndex + j, input.Bits[j]);
+					Buffer.SetByte(values, startingByteIndex + j, input.bits[j]);
 				}
 			}
 			return disconnectFlags;
@@ -152,8 +152,8 @@ namespace GGPort {
 		}
 
 		~Sync() {
-			for (int i = 0; i < m_savedState.Frames.Length; i++) {
-				freeBufferEvent?.Invoke(m_savedState.Frames[i].GameState);
+			for (int i = 0; i < m_savedState.frames.Length; i++) {
+				freeBufferEvent?.Invoke(m_savedState.frames[i].gameState);
 			}
 		}
 
@@ -208,33 +208,33 @@ namespace GGPort {
 			}
 
 			LogUtil.Log($"Sending undelayed local frame {m_frameCount} to queue {queue}.{Environment.NewLine}");
-			input.Frame = m_frameCount;
+			input.frame = m_frameCount;
 			m_inputQueues[queue].AddInput(ref input);
 
 			return true;
 		}
 
 		public class SavedFrame {
-			public TGameState GameState;
-			public int Frame { get; set; }
-			public int Checksum;
+			public TGameState gameState;
+			public int frame;
+			public int checksum;
 
-			private SavedFrame(TGameState gameState, int frame, int checksum) {
-				GameState = gameState;
-				Frame = frame;
-				Checksum = checksum;
+			public SavedFrame(TGameState gameState = default, int frame = -1, int checksum = 0) {
+				this.gameState = gameState;
+				this.frame = frame;
+				this.checksum = checksum;
 			}
-
-			public static SavedFrame CreateDefault() => new SavedFrame(default, -1, 0);
 		}
 
 		private struct SavedState {
-			public readonly SavedFrame[] Frames;
-			public int Head { get; set; }
+			public readonly SavedFrame[] frames;
+			public int head;
 
 			public SavedState(int head) : this() {
-				Frames = new SavedFrame[MAX_PREDICTION_FRAMES + 2];
-				Head = head;
+				frames = new SavedFrame[MAX_PREDICTION_FRAMES + 2];
+				for (int i = 0; i < MAX_PREDICTION_FRAMES + 2; i++) { frames[i] = new SavedFrame(); }
+				
+				this.head = head;
 			}
 		}
 
@@ -248,22 +248,22 @@ namespace GGPort {
 			}
 
 			// Move the head pointer back and load it up
-			m_savedState.Head = FindSavedFrameIndex(frame);
-			SavedFrame savedFrame = m_savedState.Frames[m_savedState.Head];
+			m_savedState.head = FindSavedFrameIndex(frame);
+			SavedFrame savedFrame = m_savedState.frames[m_savedState.head];
 
-			LogUtil.Log($"=== Loading frame info {savedFrame.Frame} (checksum: {savedFrame.Checksum:x8}).{Environment.NewLine}");
+			LogUtil.Log($"=== Loading frame info {savedFrame.frame} (checksum: {savedFrame.checksum:x8}).{Environment.NewLine}");
 
 			Platform.Assert(
-				savedFrame.GameState != null,
-				$"{nameof(savedFrame.GameState)} inside {nameof(SavedFrame)} was null and cannot be restored."
+				savedFrame.gameState != null,
+				$"{nameof(savedFrame.gameState)} inside {nameof(SavedFrame)} was null and cannot be restored."
 			);
 			
-			loadGameStateEvent?.Invoke(savedFrame.GameState);
+			loadGameStateEvent?.Invoke(savedFrame.gameState);
 
 			// Reset frameCount and the head of the state ring-buffer to point in
 			// advance of the current frame (as if we had just finished executing it).
-			m_frameCount = savedFrame.Frame;
-			m_savedState.Head = (m_savedState.Head + 1) % m_savedState.Frames.Length;
+			m_frameCount = savedFrame.frame;
+			m_savedState.head = (m_savedState.head + 1) % m_savedState.frames.Length;
 		}
 		
 		public void SaveCurrentFrame() {
@@ -271,24 +271,24 @@ namespace GGPort {
 			* See StateCompress for the real save feature implemented by FinalBurn.
 			* Write everything into the head, then advance the head pointer.
 			*/
-			SavedFrame savedFrame = m_savedState.Frames[m_savedState.Head];
-			if (savedFrame.GameState != null) {
-				freeBufferEvent?.Invoke(savedFrame.GameState);
-				savedFrame.GameState = default;
+			SavedFrame savedFrame = m_savedState.frames[m_savedState.head];
+			if (savedFrame.gameState != null) {
+				freeBufferEvent?.Invoke(savedFrame.gameState);
+				savedFrame.gameState = default;
 			}
 			
-			savedFrame.Frame = m_frameCount;
-			saveGameStateEvent?.Invoke(out savedFrame.GameState, out savedFrame.Checksum, savedFrame.Frame);
-			m_savedState.Frames[m_savedState.Head] = savedFrame;
+			savedFrame.frame = m_frameCount;
+			saveGameStateEvent?.Invoke(out savedFrame.gameState, out savedFrame.checksum, savedFrame.frame);
+			m_savedState.frames[m_savedState.head] = savedFrame;
 
-			LogUtil.Log($"=== Saved frame info {savedFrame.Frame} (checksum: {savedFrame.Checksum:x8}).{Environment.NewLine}");
-			m_savedState.Head = (m_savedState.Head + 1) % m_savedState.Frames.Length;
+			LogUtil.Log($"=== Saved frame info {savedFrame.frame} (checksum: {savedFrame.checksum:x8}).{Environment.NewLine}");
+			m_savedState.head = (m_savedState.head + 1) % m_savedState.frames.Length;
 		}
 
 		protected int FindSavedFrameIndex(int frame) {
-			int i, count = m_savedState.Frames.Length;
+			int i, count = m_savedState.frames.Length;
 			for (i = 0; i < count; i++) {
-				if (m_savedState.Frames[i].Frame == frame) {
+				if (m_savedState.frames[i].frame == frame) {
 					break;
 				}
 			}
@@ -299,11 +299,11 @@ namespace GGPort {
 		}
 
 		public SavedFrame GetLastSavedFrame() {
-			int i = m_savedState.Head - 1;
+			int i = m_savedState.head - 1;
 			if (i < 0) {
-				i = m_savedState.Frames.Length - 1;
+				i = m_savedState.frames.Length - 1;
 			}
-			return m_savedState.Frames[i];
+			return m_savedState.frames[i];
 		}
 
 		private void CreateQueues() {
@@ -318,17 +318,17 @@ namespace GGPort {
 		}
 
 		private bool CheckSimulationConsistency(out int seekTo) {
-			int firstIncorrect = GameInput.kNullFrame;
+			int firstIncorrect = GameInput.NULL_FRAME;
 			for (int i = 0; i < m_numPlayers; i++) {
 				int incorrect = m_inputQueues[i].GetFirstIncorrectFrame();
 				LogUtil.Log($"considering incorrect frame {incorrect} reported by queue {i}.{Environment.NewLine}");
 
-				if (incorrect != GameInput.kNullFrame && (firstIncorrect == GameInput.kNullFrame || incorrect < firstIncorrect)) {
+				if (incorrect != GameInput.NULL_FRAME && (firstIncorrect == GameInput.NULL_FRAME || incorrect < firstIncorrect)) {
 					firstIncorrect = incorrect;
 				}
 			}
 
-			if (firstIncorrect == GameInput.kNullFrame) {
+			if (firstIncorrect == GameInput.NULL_FRAME) {
 				LogUtil.Log($"prediction ok.  proceeding.{Environment.NewLine}");
 				seekTo = -1;
 				return true;

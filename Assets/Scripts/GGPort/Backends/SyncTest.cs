@@ -54,14 +54,14 @@ namespace GGPort {
 			m_gameName = gameName;
 
 			// Initialize the synchronization layer
-			m_sync = new Sync<TGameState>(new PeerMessage.ConnectStatus[PeerMessage.kMaxPlayers], Sync<TGameState>.MAX_PREDICTION_FRAMES);
-			m_sync.advanceFrameEvent += advanceFrameCallback;
-			m_sync.saveGameStateEvent += saveGameStateCallback;
-			m_sync.loadGameStateEvent += loadGameStateCallback;
-			m_sync.freeBufferEvent += freeBufferCallback;
+			m_sync = new Sync<TGameState>(new PeerMessage.ConnectStatus[PeerMessage.MAX_PLAYERS], Sync<TGameState>.MAX_PREDICTION_FRAMES);
+			m_sync.advanceFrameEvent += advanceFrameEvent;
+			m_sync.saveGameStateEvent += saveGameStateEvent;
+			m_sync.loadGameStateEvent += loadGameStateEvent;
+			m_sync.freeBufferEvent += freeBufferEvent;
 
 			// Preload the ROM
-			BeginGameEvent?.Invoke(gameName);
+			beginGameEvent?.Invoke(gameName);
 		}
 
 		public override ErrorCode Idle(int timeout) {
@@ -69,7 +69,7 @@ namespace GGPort {
 
 			Event info = new Event(EventCode.Running);
 				
-			OnEventEvent?.Invoke(info);
+			onEventEvent?.Invoke(info);
 			m_isRunning = true;
 			return ErrorCode.Success;
 		}
@@ -98,7 +98,7 @@ namespace GGPort {
 			} // TODO refactor/optimize
 			
 			for (int i = 0; i < size; i++) {
-				m_currentInput.Bits[index * size + i] |= valByteArr[i];
+				m_currentInput.bits[index * size + i] |= valByteArr[i];
 			}
 			return ErrorCode.Success;
 		}
@@ -117,7 +117,7 @@ namespace GGPort {
 			}
 
 			for (int i = 0; i < size; i++) {
-				Buffer.SetByte(values, i, m_lastInput.Bits[i]);
+				Buffer.SetByte(values, i, m_lastInput.bits[i]);
 			}
 			
 			disconnectFlags = 0;
@@ -144,8 +144,8 @@ namespace GGPort {
 			
 			SavedInfo info = new SavedInfo(
 				frame,
-				lastSavedFrame.Checksum,
-				lastSavedFrame.GameState,
+				lastSavedFrame.checksum,
+				lastSavedFrame.gameState,
 				m_lastInput
 			);
 			
@@ -158,7 +158,7 @@ namespace GGPort {
 
 				m_isRollingBack = true;
 				while(m_savedFrames.Count > 0) {
-					AdvanceFrameEvent?.Invoke(0);
+					advanceFrameEvent?.Invoke(0);
 
 					// Verify that the checksumn of this frame is the same as the one in our
 					// list.
@@ -167,7 +167,7 @@ namespace GGPort {
 					if (info.Frame != m_sync.GetFrameCount()) {
 						RaiseSyncError("Frame number %d does not match saved frame number %d", info.Frame, frame);
 					}
-					int checksum = m_sync.GetLastSavedFrame().Checksum;
+					int checksum = m_sync.GetLastSavedFrame().checksum;
 					if (info.Checksum != checksum) {
 						LogSaveStates(info);
 						RaiseSyncError("Checksum for frame %d does not match saved (%d != %d)", frame, checksum, info.Checksum);
@@ -245,10 +245,10 @@ namespace GGPort {
 
 		protected void LogSaveStates(SavedInfo info) {
 			string filename = $"synclogs\\state-{m_sync.GetFrameCount():0000}-original.log";
-			LogGameStateEvent?.Invoke(filename, info.GameState);
+			logGameStateEvent?.Invoke(filename, info.GameState);
 
 			filename = $"synclogs\\state-{m_sync.GetFrameCount():0000}-replay.log";
-			LogGameStateEvent?.Invoke(filename, m_sync.GetLastSavedFrame().GameState);
+			logGameStateEvent?.Invoke(filename, m_sync.GetLastSavedFrame().gameState);
 		}
 	};
 }
