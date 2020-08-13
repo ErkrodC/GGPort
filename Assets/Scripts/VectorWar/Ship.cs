@@ -34,11 +34,11 @@ namespace VectorWar {
 			speed = other.speed;
 			cooldown = other.cooldown;
 			score = other.score;
-			
+
 			bullets = new Bullet[MAX_BULLETS];
 			for (int i = 0; i < MAX_BULLETS; i++) {
 				bullets[i] = other.bullets[i];
-			} 
+			}
 		}
 
 		public static unsafe int Size() {

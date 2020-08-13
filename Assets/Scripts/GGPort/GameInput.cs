@@ -15,6 +15,7 @@ namespace GGPort {
 		public const int MAX_BYTES = 9;
 		public const int MAX_PLAYERS = 2;
 		public const int NULL_FRAME = -1;
+		private const int _SIZE_OF_BITS = MAX_BYTES * MAX_PLAYERS;
 
 		public int frame;
 		public int size; /* size in bytes of the entire input for all players */
@@ -37,12 +38,11 @@ namespace GGPort {
 
 		public void Init(int frame, byte[] bits, int size, int offset) {
 			Platform.Assert(0 < size && size <= MAX_BYTES);
-			
+
 			this.frame = frame;
 			this.size = size;
 
-			const int kSizeOfBits = MAX_BYTES * MAX_PLAYERS;
-			for (int i = 0; i < kSizeOfBits; i++) { this.bits[i] = 0; }
+			for (int i = 0; i < _SIZE_OF_BITS; i++) { this.bits[i] = 0; }
 
 			if (bits == null) { return; }
 
@@ -54,15 +54,14 @@ namespace GGPort {
 
 		public void Init(int frame, byte[] bits, int size) {
 			Platform.Assert(0 < size && size <= MAX_BYTES);
-			
+
 			this.frame = frame;
 			this.size = size;
 
-			const int kSizeOfBits = MAX_BYTES * MAX_PLAYERS;
-			for (int i = 0; i < kSizeOfBits; i++) {
+			for (int i = 0; i < _SIZE_OF_BITS; i++) {
 				this.bits[i] = 0;
 			}
-			
+
 			if (bits != null) {
 				for (int i = 0; i < size; i++) {
 					this.bits[i] = bits[i];
@@ -71,15 +70,14 @@ namespace GGPort {
 		}
 
 		public void Erase() {
-			const int kSizeOfBits = MAX_BYTES * MAX_PLAYERS;
-			for (int i = 0; i < kSizeOfBits; i++) {
+			for (int i = 0; i < _SIZE_OF_BITS; i++) {
 				bits[i] = 0;
 			}
 		}
 
 		public string Desc(bool showFrame = true) {
 			Platform.Assert(size != 0);
-			
+
 			string result = $"({(showFrame ? $"frame:{frame} " : "")}size:{size} ";
 
 			for (int i = 0; i < size * 8; i++) {
@@ -99,7 +97,7 @@ namespace GGPort {
 			if (!bitsOnly && frame != other.frame) {
 				LogUtil.Log($"frames don't match: {frame}, {other.frame}{Environment.NewLine}");
 			}
-			
+
 			if (size != other.size) {
 				LogUtil.Log($"sizes don't match: {size}, {other.size}{Environment.NewLine}");
 			}
@@ -111,14 +109,12 @@ namespace GGPort {
 				bitsAreEqual = false;
 				break;
 			}
-			
+
 			if (!bitsAreEqual) { LogUtil.Log($"bits don't match{Environment.NewLine}"); }
 
 			Platform.Assert(size != 0 && other.size != 0);
-			
-			return (bitsOnly || frame == other.frame) &&
-			       size == other.size &&
-			       bitsAreEqual;
+
+			return (bitsOnly || frame == other.frame) && size == other.size && bitsAreEqual;
 		}
 	};
 }

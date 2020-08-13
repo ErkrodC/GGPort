@@ -19,14 +19,14 @@ namespace VectorWar {
 		[SerializeField] private Transform playerConfsContainer;
 		[SerializeField] private GameObject playerConfPrefab;
 		[SerializeField] private Button startButton;
-		private List<PlayerConf> playerConfs = new List<PlayerConf>();
+		private readonly List<PlayerConfig> _playerConfigs = new List<PlayerConfig>();
 
-		private long start;
-		private long next;
-		private long now;
-		private bool started;
-		
-		private readonly KeyCode[] fKeys = {
+		private long _start;
+		private long _next;
+		private long _now;
+		private bool _started;
+
+		private readonly KeyCode[] _fKeys = {
 			KeyCode.F1,
 			KeyCode.F2,
 			KeyCode.F3,
@@ -42,18 +42,18 @@ namespace VectorWar {
 
 		private void Awake() {
 			titleText.text = $"(pid:{Platform.GetProcessID()} GGPort SDK Sample: Vector War)";
-			started = false;
+			_started = false;
 			startButton.onClick.AddListener(OnStartButton);
-			
+
 			hostIPText.gameObject.SetActive(spectateModeToggle.isOn);
 			spectateModeToggle.onValueChanged.AddListener(hostIPText.gameObject.SetActive);
-			
+
 			numPlayersText.onValueChanged.AddListener(PopulatePlayerConfContainer);
 			PopulatePlayerConfContainer(numPlayersText.text);
 
-			foreach (PlayerConf playerConf in playerConfs) {
-				playerConf.gameObject.SetActive(!spectateModeToggle.isOn);
-				spectateModeToggle.onValueChanged.AddListener(isOn => playerConf.gameObject.SetActive(!isOn));
+			foreach (PlayerConfig playerConfig in _playerConfigs) {
+				playerConfig.gameObject.SetActive(!spectateModeToggle.isOn);
+				spectateModeToggle.onValueChanged.AddListener(isOn => playerConfig.gameObject.SetActive(!isOn));
 			}
 
 			hostIPText.gameObject.SetActive(spectateModeToggle.isOn);
@@ -62,32 +62,32 @@ namespace VectorWar {
 #if !UNITY_EDITOR
 			localPortText.text = "5556";
 #endif
-			playerConfs[0].IsLocal = true;
+			_playerConfigs[0].isLocal = true;
 		}
 
 		private void Update() {
-			if (!started) { return; }
-			
+			if (!_started) { return; }
+
 			if (Input.GetKeyUp(KeyCode.P)) {
 				PerfMon<GameState>.ggpoutil_perfmon_toggle();
 			} else if (Input.GetKeyUp(KeyCode.Escape)) {
 				VectorWar.Exit();
 				Application.Quit();
 			} else {
-				foreach (KeyCode fKey in fKeys) {
-					if (Input.GetKeyUp(fKey)) {
-						int playerIndex = int.Parse(fKey.ToString().Split('F')[1]) - 1;
-						VectorWar.DisconnectPlayer(playerIndex);
-					}
+				foreach (KeyCode fKey in _fKeys) {
+					if (!Input.GetKeyUp(fKey)) { continue; }
+
+					int playerIndex = int.Parse(fKey.ToString().Split('F')[1]) - 1;
+					VectorWar.DisconnectPlayer(playerIndex);
 				}
 			}
 
-			now = Platform.GetCurrentTimeMS();
-			VectorWar.Idle((int) Math.Max(0, next - now - 1));
-			if (now >= next) {
-				VectorWar.RunFrame();
-				next = now + (1000 / 60);
-			}
+			_now = Platform.GetCurrentTimeMS();
+			VectorWar.Idle((int) Math.Max(0, _next - _now - 1));
+			if (_now < _next) { return; }
+
+			VectorWar.RunFrame();
+			_next = _now + 1000 / 60;
 		}
 
 		private void OnStartButton() {
@@ -98,31 +98,31 @@ namespace VectorWar {
 				IPEndPoint hostEndPoint = hostIPText.GetIPEndPoint();
 				VectorWar.InitSpectator(localPort, numPlayers, hostEndPoint);
 			} else {
-				Player[] players = new Player[GGPort.Types.kMaxSpectators + GGPort.Types.kMaxPlayers];
+				Player[] players = new Player[GGPort.Types.MAX_SPECTATORS + GGPort.Types.MAX_PLAYERS];
 
 				int playerIndex;
 				for (playerIndex = 0; playerIndex < numPlayers; playerIndex++) {
-					players[playerIndex].Size = players[playerIndex].CalculateSize(); // TODO for what is size used?
-					players[playerIndex].PlayerNum = playerIndex + 1;
+					players[playerIndex].size = players[playerIndex].CalculateSize(); // TODO for what is size used?
+					players[playerIndex].playerNum = playerIndex + 1;
 
-					PlayerConf playerConf = playerConfs[playerIndex];
-					
-					if (playerConf.IsLocal) {
-						players[playerIndex].Type = PlayerType.Local;
+					PlayerConfig playerConfig = _playerConfigs[playerIndex];
+
+					if (playerConfig.isLocal) {
+						players[playerIndex].type = PlayerType.Local;
 					} else {
-						players[playerIndex].Type = PlayerType.Remote;
-						players[playerIndex].EndPoint = playerConf.GetIPEndPoint();
+						players[playerIndex].type = PlayerType.Remote;
+						players[playerIndex].endPoint = playerConfig.GetIPEndPoint();
 					}
 				}
 
 				// TODO allow adding spectators
 				/*// these are spectators...
 				int numSpectators = 0;
-				for (int spectatorIndex = playerIndex; spectatorIndex < numPlayers; spectatorIndex++, numSpectators++) {
+				for (int spectatorIndex = playerIndex; spectatorIndex < _numPlayers; spectatorIndex++, numSpectators++) {
 					players[spectatorIndex].type = GGPOPlayerType.GGPO_PLAYERTYPE_SPECTATOR;
 					players[spectatorIndex].remote = playerConfs[spectatorIndex].GetIPEndPoint();
 				}*/
-				
+
 				/*while (playerIndex < playerConfs.Count) {
 					
 					playerIndex++;
@@ -130,40 +130,41 @@ namespace VectorWar {
 				}*/
 
 				gameStartUI.SetActive(false);
-				VectorWar.Init(localPort, numPlayers, players, 0/*numSpectators*/);
+				VectorWar.Init(localPort, numPlayers, players, 0 /*numSpectators*/);
 			}
 
-			start = Platform.GetCurrentTimeMS();
-			next = start;
-			now = start;
+			_start = Platform.GetCurrentTimeMS();
+			_next = _start;
+			_now = _start;
 
-			started = true;
+			_started = true;
 		}
 
 		private void PopulatePlayerConfContainer(string text) {
 			if (int.TryParse(text, out int numPlayers)) {
-				const int playerConfLimit = GGPort.Types.kMaxPlayers;
-				if (numPlayers > playerConfLimit) {
-					numPlayersText.text = playerConfLimit.ToString();
+				const int _PLAYER_CONF_LIMIT = GGPort.Types.MAX_PLAYERS;
+				if (numPlayers > _PLAYER_CONF_LIMIT) {
+					numPlayersText.text = _PLAYER_CONF_LIMIT.ToString();
 					return;
 				}
-				
+
 				int currentNumConfs = playerConfsContainer.childCount;
 
 				if (numPlayers > currentNumConfs) {
 					for (int i = currentNumConfs; i < numPlayers; i++) {
-						PlayerConf newPlayerConf = Instantiate(playerConfPrefab, playerConfsContainer).GetComponent<PlayerConf>();
-						spectateModeToggle.onValueChanged.AddListener(isOn => newPlayerConf.gameObject.SetActive(!isOn));
-						playerConfs.Add(newPlayerConf);
+						PlayerConfig newPlayerConfig =
+							Instantiate(playerConfPrefab, playerConfsContainer).GetComponent<PlayerConfig>();
+						spectateModeToggle.onValueChanged.AddListener(isOn => newPlayerConfig.gameObject.SetActive(!isOn));
+						_playerConfigs.Add(newPlayerConfig);
 					}
 				} else if (numPlayers < currentNumConfs) {
 					for (int i = numPlayers; i < currentNumConfs; i++) {
-						playerConfs[i].gameObject.SetActive(false);
+						_playerConfigs[i].gameObject.SetActive(false);
 					}
 				}
 
 				for (int i = 0; i < numPlayers; i++) {
-					playerConfs[i].gameObject.SetActive(!spectateModeToggle.isOn);
+					_playerConfigs[i].gameObject.SetActive(!spectateModeToggle.isOn);
 				}
 			}
 		}

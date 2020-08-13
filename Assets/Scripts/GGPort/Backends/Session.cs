@@ -8,8 +8,9 @@ namespace GGPort {
 		* implement it, but should ignore the 'game' parameter.
 		*/
 		public delegate bool BeginGameDelegate(string game);
+
 		protected BeginGameDelegate beginGameEvent { get; set; }
-		
+
 		/*
 		* advance_frame - Called during a rollback.  You should advance your game
 		* state by exactly one frame.  Before each frame, call ggpo_synchronize_input
@@ -20,18 +21,21 @@ namespace GGPort {
 		* The flags parameter is reserved.  It can safely be ignored at this time.
 		*/
 		public delegate bool AdvanceFrameDelegate(int flags);
+
 		protected AdvanceFrameDelegate advanceFrameEvent { get; set; }
-		
+
 		/* 
 		* on_event - Notification that something has happened.  See the GGPOEventCode
 		* structure above for more information.
 		*/
-		public delegate bool OnEventDelegate(Event info);
+		public delegate bool OnEventDelegate(EventData info);
+
 		protected OnEventDelegate onEventEvent { get; set; }
 
 		public delegate void LogTextDelegate(string message);
+
 		protected LogTextDelegate logTextEvent { get; set; }
-		
+
 		/*
 		* Should be called periodically by your application to give GGPO.net
 		* a chance to do some work.  Most packet transmissions and rollbacks occur
@@ -40,8 +44,10 @@ namespace GGPort {
 		* timeout - The amount of time GGPO.net is allowed to spend in this function,
 		* in milliseconds.
 		*/
-		public virtual ErrorCode Idle(int timeout) { return ErrorCode.Success; }
-		
+		public virtual ErrorCode Idle(int timeout) {
+			return ErrorCode.Success;
+		}
+
 		/*
 		* Must be called for each player in the session (e.g. in a 3 player session, must
 		* be called 3 times).
@@ -52,7 +58,7 @@ namespace GGPort {
 		* (e.g. in the on_event callbacks).
 		*/
 		public abstract ErrorCode AddPlayer(Player player, out PlayerHandle handle);
-		
+
 		/*
 		* Used to notify GGPO.net of inputs that should be trasmitted to remote
 		* players.  ggpo_add_local_input must be called once every frame for
@@ -67,7 +73,7 @@ namespace GGPort {
 		* size passed into ggpo_start_session.
 		*/
 		public abstract ErrorCode AddLocalInput(PlayerHandle player, byte[] value, int size);
-		
+
 		/*
 		* You should call ggpo_synchronize_input before every frame of execution,
 		* including those frames which happen during rollback.
@@ -84,21 +90,28 @@ namespace GGPort {
 		* if only player 3 has disconnected, disconnect flags will be 8 (i.e. 1 << 3).
 		*/
 		public abstract ErrorCode SynchronizeInput(Array values, int size, ref int disconnectFlags);
-		
+
 		/*
 		* You should call ggpo_advance_frame to notify GGPO.net that you have
 		* advanced your gamestate by a single frame.  You should call this everytime
 		* you advance the gamestate by a frame, even during rollbacks.  GGPO.net
 		* may call your save_state callback before this function returns.
 		*/
-		public virtual ErrorCode AdvanceFrame() { return ErrorCode.Success; }
-		public virtual ErrorCode Chat(string text) { return ErrorCode.Success; }
-		
+		public virtual ErrorCode AdvanceFrame() {
+			return ErrorCode.Success;
+		}
+
+		public virtual ErrorCode Chat(string text) {
+			return ErrorCode.Success;
+		}
+
 		/*
 		* Disconnects a remote player from a game.  Will return GGPO_ERRORCODE_PLAYER_DISCONNECTED
 		* if you try to disconnect a player who has already been disconnected.
 		*/
-		public virtual ErrorCode DisconnectPlayer(PlayerHandle handle) { return ErrorCode.Success; }
+		public virtual ErrorCode DisconnectPlayer(PlayerHandle handle) {
+			return ErrorCode.Success;
+		}
 
 		/*
 		* Used to fetch some statistics about the quality of the network connection.
@@ -154,7 +167,7 @@ namespace GGPort {
 			return ErrorCode.Success;
 		}
 	}
-	
+
 	public abstract class Session<TGameState> : Session {
 		protected Session(
 			BeginGameDelegate beginGameCallback,
@@ -183,6 +196,7 @@ namespace GGPort {
 		* a checksum of the data and store it in the *checksum argument.
 		*/
 		public delegate bool SaveGameStateDelegate(out TGameState gameState, out int checksum, int frame);
+
 		protected SaveGameStateDelegate saveGameStateEvent { get; set; }
 
 		/*
@@ -193,6 +207,7 @@ namespace GGPort {
 		* buffer.
 		*/
 		public delegate bool LoadGameStateDelegate(TGameState gameState);
+
 		protected LoadGameStateDelegate loadGameStateEvent { get; set; }
 
 		/*
@@ -201,6 +216,7 @@ namespace GGPort {
 		* state in a human readable form.
 		*/
 		public delegate bool LogGameStateDelegate(string filename, TGameState gameState);
+
 		protected LogGameStateDelegate logGameStateEvent { get; set; }
 
 		/*
@@ -208,6 +224,7 @@ namespace GGPort {
 		* should deallocate the memory contained in the buffer.
 		*/
 		public delegate void FreeBufferDelegate(TGameState gameState);
+
 		protected FreeBufferDelegate freeBufferEvent { get; set; }
 
 		/*

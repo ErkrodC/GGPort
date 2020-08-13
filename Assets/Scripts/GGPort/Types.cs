@@ -5,10 +5,10 @@ using System.Runtime.InteropServices;
 namespace GGPort {
 	// TODO rename
 	public static class Types {
-		public const int kMaxPlayers = 4;
-		public const int kMaxPredictionFrames = 8;
-		public const int kMaxSpectators = 32;
-		public const int kSpectatorInputInterval = 4;
+		public const int MAX_PLAYERS = 4;
+		public const int MAX_PREDICTION_FRAMES = 8;
+		public const int MAX_SPECTATORS = 32;
+		public const int SPECTATOR_INPUT_INTERVAL = 4;
 
 		public static bool IsSuccess(this ErrorCode result) {
 			return result == ErrorCode.Success;
@@ -16,12 +16,12 @@ namespace GGPort {
 	}
 
 	public struct PlayerHandle {
-		public const int kInvalidHandle = -1;
-		
-		public readonly int HandleValue;
+		public const int INVALID_HANDLE = -1;
+
+		public readonly int handleValue;
 
 		public PlayerHandle(int handleValue) {
-			HandleValue = handleValue;
+			this.handleValue = handleValue;
 		}
 	}
 
@@ -56,16 +56,18 @@ namespace GGPort {
 	*/
 
 	public struct Player {
-		public int Size;
-		public PlayerType Type;
-		public int PlayerNum;
-		public IPEndPoint EndPoint;
+		public int size;
+		public PlayerType type;
+		public int playerNum;
+		public IPEndPoint endPoint;
 
 		public int CalculateSize() {
 			int siz = sizeof(int);
 			siz += sizeof(PlayerType);
 			siz += sizeof(int);
-			siz += Type == PlayerType.Local ? 0 : EndPoint.Address.GetAddressBytes().Length;
+			siz += type == PlayerType.Local
+				? 0
+				: endPoint.Address.GetAddressBytes().Length;
 			siz += sizeof(int);
 
 			return siz;
@@ -126,12 +128,12 @@ namespace GGPort {
 	}
 
 	/*
-	* The GGPOEvent structure contains an asynchronous event notification sent
-	* by the on_event callback.  See GGPOEventCode, above, for a detailed
+	* Contains an asynchronous event notification sent
+	* by the on_event callback.  See EventCode, above, for a detailed
 	* explanation of each event.
 	*/
-	[StructLayout(LayoutKind.Explicit)] // TODO refactor into C# events which take the below structures as params, as per type;
-	public struct Event {
+	[StructLayout(LayoutKind.Explicit)]
+	public struct EventData {
 		[FieldOffset(0)] public EventCode code;
 
 		[FieldOffset(4)] public Connected connected;
@@ -166,14 +168,15 @@ namespace GGPort {
 
 		public struct ConnectionInterrupted {
 			public PlayerHandle player { get; set; }
-			public int disconnect_timeout { get; set; }
+			public int disconnectTimeout { get; set; }
 		}
 
 		public struct ConnectionResumed {
 			public PlayerHandle player { get; set; }
 		}
 
-		public Event(EventCode code) : this() {
+		public EventData(EventCode code)
+			: this() {
 			this.code = code;
 		}
 	}
@@ -217,15 +220,15 @@ namespace GGPort {
 		public TimeSync timeSync;
 
 		public struct Network {
-			public int SendQueueLength { get; set; }
-			public readonly int ReceiveQueueLength;
-			public int Ping { get; set; }
-			public int KbpsSent { get; set; }
+			public int sendQueueLength { get; set; }
+			public readonly int receiveQueueLength;
+			public int ping { get; set; }
+			public int kbpsSent { get; set; }
 		}
 
 		public struct TimeSync {
-			public int LocalFramesBehind { get; set; }
-			public int RemoteFramesBehind { get; set; }
+			public int localFramesBehind { get; set; }
+			public int remoteFramesBehind { get; set; }
 		}
 	}
 }

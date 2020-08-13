@@ -32,7 +32,7 @@ namespace VectorWar {
 			frameNumber = other.frameNumber;
 			bounds = other.bounds;
 			numShips = other.numShips;
-			
+
 			ships = new Ship[MAX_SHIPS];
 			for (int i = 0; i < MAX_SHIPS; i++) {
 				ships[i] = other.ships[i];
@@ -51,12 +51,12 @@ namespace VectorWar {
 
 			frameNumber = 0;
 			numShips = numPlayers;
-			
+
 			ships = new Ship[MAX_SHIPS];
 			for (int j = 0; j < ships.Length; j++) {
 				ships[j] = new Ship();
 			}
-			
+
 			for (i = 0; i < numShips; i++) {
 				int heading = i * 360 / numPlayers;
 				double cost, sint, theta;
@@ -114,18 +114,23 @@ namespace VectorWar {
 
 			if (ship.cooldown == 0) {
 				if (fire != 0) {
-					LogUtil.Log($"Firing bullet.{Environment.NewLine}"); // TODO tag based log? to easily enable/disable entire categories
+					LogUtil.Log(
+						$"Firing bullet.{Environment.NewLine}"
+					); // TODO tag based log? to easily enable/disable entire categories
 					for (int i = 0; i < Ship.MAX_BULLETS; i++) {
-						float dx = (float) Math.Cos(MathUtil.degtorad(ship.heading)); // NOTE possible sources of non-determinism
-						float dy = (float) Math.Sin(MathUtil.degtorad(ship.heading));
+						float dx = (float) Math.Cos(
+							MathUtil.DegToRad(ship.heading)
+						); // NOTE possible sources of non-determinism
+						float dy = (float) Math.Sin(MathUtil.DegToRad(ship.heading));
 
 						if (ship.bullets[i].active) { continue; }
 
 						ship.bullets[i].active = true;
-						ship.bullets[i].position.x = ship.position.x + (ship.radius * dx); // NOTE possible sources of non-determinism
-						ship.bullets[i].position.y = ship.position.y + (ship.radius * dy);
-						ship.bullets[i].velocity.x = ship.velocity.x + (Bullet.BULLET_SPEED * dx);
-						ship.bullets[i].velocity.y = ship.velocity.y + (Bullet.BULLET_SPEED * dy);
+						ship.bullets[i].position.x =
+							ship.position.x + ship.radius * dx; // NOTE possible sources of non-determinism
+						ship.bullets[i].position.y = ship.position.y + ship.radius * dy;
+						ship.bullets[i].velocity.x = ship.velocity.x + Bullet.BULLET_SPEED * dx;
+						ship.bullets[i].velocity.y = ship.velocity.y + Bullet.BULLET_SPEED * dy;
 						ship.cooldown = Bullet.BULLET_COOLDOWN;
 						break;
 					}
@@ -133,8 +138,9 @@ namespace VectorWar {
 			}
 
 			if (!MathUtil.Equals0(thrust)) {
-				float dx = (float) (thrust * Math.Cos(MathUtil.degtorad(heading))); // NOTE possible sources of non-determinism
-				float dy = (float) (thrust * Math.Sin(MathUtil.degtorad(heading)));
+				float dx = (float) (thrust
+				                    * Math.Cos(MathUtil.DegToRad(heading))); // NOTE possible sources of non-determinism
+				float dy = (float) (thrust * Math.Sin(MathUtil.DegToRad(heading)));
 
 				ship.velocity.x += dx;
 				ship.velocity.y += dy;
@@ -142,8 +148,8 @@ namespace VectorWar {
 					ship.velocity.x * ship.velocity.x + ship.velocity.y * ship.velocity.y
 				); // NOTE possible source of non-determinism
 				if (mag > Ship.SHIP_MAX_THRUST) {
-					ship.velocity.x = (ship.velocity.x * Ship.SHIP_MAX_THRUST) / mag;
-					ship.velocity.y = (ship.velocity.y * Ship.SHIP_MAX_THRUST) / mag;
+					ship.velocity.x = ship.velocity.x * Ship.SHIP_MAX_THRUST / mag;
+					ship.velocity.y = ship.velocity.y * Ship.SHIP_MAX_THRUST / mag;
 				}
 			}
 

@@ -4,52 +4,52 @@ using System.Collections.Generic;
 
 namespace GGPort {
 	public class CircularQueue<T> : IEnumerable<T> {
-		public int Count { get; private set; }
-		
-		private readonly int capacity;
-		private readonly T[] elements;
-		private int head;
-		private int tail;
+		public int count { get; private set; }
+
+		private readonly int _capacity;
+		private readonly T[] _elements;
+		private int _head;
+		private int _tail;
 
 		public CircularQueue(int capacity) {
-			this.capacity = capacity;
-			elements = new T[capacity];
-			head = 0;
-			tail = 0;
-			Count = 0;
+			_capacity = capacity;
+			_elements = new T[capacity];
+			_head = 0;
+			_tail = 0;
+			count = 0;
 		}
 
 		public T this[int i] {
 			get {
-				Platform.Assert(i < Count);
+				Platform.Assert(i < count);
 
-				return elements[(tail + i) % capacity];
+				return _elements[(_tail + i) % _capacity];
 			}
 		}
 
 		public ref T Peek() {
-			Platform.Assert(0 < Count && Count <= capacity);
+			Platform.Assert(0 < count && count <= _capacity);
 
-			return ref elements[tail];
+			return ref _elements[_tail];
 		}
 
 		public T Pop() {
-			Platform.Assert(0 < Count && Count <= capacity);
+			Platform.Assert(0 < count && count <= _capacity);
 
-			T value = elements[tail];
+			T value = _elements[_tail];
 
-			tail = (tail + 1) % capacity;
-			--Count;
+			_tail = (_tail + 1) % _capacity;
+			--count;
 
 			return value;
 		}
 
 		public void Push(T value) {
-			Platform.Assert(Count < capacity);
+			Platform.Assert(count < _capacity);
 
-			elements[head] = value;
-			head = (head + 1) % capacity;
-			++Count;
+			_elements[_head] = value;
+			_head = (_head + 1) % _capacity;
+			++count;
 		}
 
 		public IEnumerator<T> GetEnumerator() {
@@ -61,27 +61,27 @@ namespace GGPort {
 		}
 
 		private struct CircleQueueEnumerator : IEnumerator<T> {
-			private readonly CircularQueue<T> queue;
-			private int position;
-			
+			private readonly CircularQueue<T> _queue;
+			private int _position;
+
 			public CircleQueueEnumerator(CircularQueue<T> queue) {
-				this.queue = queue;
-				position = -1;
+				_queue = queue;
+				_position = -1;
 			}
 
 			public bool MoveNext() {
-				position++;
-				return position < queue.Count;
+				_position++;
+				return _position < _queue.count;
 			}
 
 			public void Reset() {
-				position = -1;
+				_position = -1;
 			}
 
 			public T Current {
 				get {
 					try {
-						return queue[position];
+						return _queue[_position];
 					} catch (Exception exception) {
 						Platform.AssertFailed(exception);
 						throw;

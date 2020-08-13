@@ -12,15 +12,15 @@ namespace VectorWar {
 		[SerializeField] private GameObject shipPrefab;
 		[SerializeField] private Canvas gameCanvas;
 
-		private GameObject[] m_visualShips;
-		
+		private GameObject[] _visualShips;
+
 		private void Awake() {
 			instance = this;
-			
-			m_visualShips = new GameObject[GameState.MAX_SHIPS];
-			for (int i = 0; i < m_visualShips.Length; i++) {
-				m_visualShips[i] = Instantiate(shipPrefab, gameCanvas.transform);
-				m_visualShips[i].SetActive(false);
+
+			_visualShips = new GameObject[GameState.MAX_SHIPS];
+			for (int i = 0; i < _visualShips.Length; i++) {
+				_visualShips[i] = Instantiate(shipPrefab, gameCanvas.transform);
+				_visualShips[i].SetActive(false);
 			}
 
 #if SHOW_LOG
@@ -48,7 +48,7 @@ namespace VectorWar {
 		public void Draw(GameState gameState, NonGameState nonGameState) {
 			for (int shipIndex = 0; shipIndex < gameState.ships.Length; shipIndex++) {
 				Ship ship = gameState.ships[shipIndex];
-				GameObject visualShip = m_visualShips[shipIndex];
+				GameObject visualShip = _visualShips[shipIndex];
 
 				visualShip.SetActive(true);
 				visualShip.transform.position = new Vector3(ship.position.x, ship.position.y, 0);

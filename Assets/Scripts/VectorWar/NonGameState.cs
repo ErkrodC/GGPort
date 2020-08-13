@@ -15,71 +15,71 @@ namespace VectorWar {
 		Synchronizing,
 		Running,
 		Disconnected,
-		Disconnecting,
+		Disconnecting
 	};
 
 	public struct PlayerConnectionInfo {
-		public PlayerType Type { get; set; }
-		public PlayerHandle Handle { get; set; }
-		public PlayerConnectState State { get; set; }
-		public int ConnectProgress { get; set; }
-		public int DisconnectTimeout { get; set; }
-		public long DisconnectStart { get; set; }
+		public PlayerType type { get; set; }
+		public PlayerHandle handle { get; set; }
+		public PlayerConnectState state { get; set; }
+		public int connectProgress { get; set; }
+		public int disconnectTimeout { get; set; }
+		public long disconnectStart { get; set; }
 	};
 
 	public class NonGameState {
-		private const int kMaxPlayers = 64;
+		private const int _MAX_PLAYERS = 64;
 
-		public PlayerHandle LocalPlayerHandle;
-		public readonly PlayerConnectionInfo[] Players;
-		public int NumPlayers;
+		public PlayerHandle localPlayerHandle;
+		public readonly PlayerConnectionInfo[] players;
+		public int numPlayers;
 
-		public ChecksumInfo Now;
-		public ChecksumInfo Periodic;
+		public ChecksumInfo now;
+		public ChecksumInfo periodic;
 
 		public NonGameState() {
-			Players = new PlayerConnectionInfo[kMaxPlayers];
+			players = new PlayerConnectionInfo[_MAX_PLAYERS];
 		}
 
 		public void SetConnectState(PlayerHandle handle, PlayerConnectState state) {
-			for (int i = 0; i < NumPlayers; i++) {
-				if (Players[i].Handle.HandleValue == handle.HandleValue) {
-					Players[i].ConnectProgress = 0;
-					Players[i].State = state;
+			for (int i = 0; i < numPlayers; i++) {
+				if (players[i].handle.handleValue == handle.handleValue) {
+					players[i].connectProgress = 0;
+					players[i].state = state;
 					break;
 				}
 			}
 		}
 
 		public void SetConnectState(PlayerConnectState state) {
-			for (int i = 0; i < NumPlayers; i++) {
-				Players[i].State = state;
+			for (int i = 0; i < numPlayers; i++) {
+				players[i].state = state;
 			}
 		}
 
 		public void SetDisconnectTimeout(PlayerHandle handle, long when, int timeout) {
-			for (int i = 0; i < NumPlayers; i++) {
-				if (Players[i].Handle.HandleValue == handle.HandleValue) {
-					Players[i].DisconnectStart = when;
-					Players[i].DisconnectTimeout = timeout;
-					Players[i].State = PlayerConnectState.Disconnecting;
+			for (int i = 0; i < numPlayers; i++) {
+				if (players[i].handle.handleValue == handle.handleValue) {
+					players[i].disconnectStart = when;
+					players[i].disconnectTimeout = timeout;
+					players[i].state = PlayerConnectState.Disconnecting;
 					break;
 				}
 			}
 		}
 
 		public void UpdateConnectProgress(PlayerHandle handle, int progress) {
-			for (int i = 0; i < NumPlayers; i++) {
-				if (Players[i].Handle.HandleValue == handle.HandleValue) {
-					Players[i].ConnectProgress = progress;
+			for (int i = 0; i < numPlayers; i++) {
+				if (players[i].handle.handleValue == handle.handleValue) {
+					players[i].connectProgress = progress;
 					break;
 				}
 			}
 		}
-		
+
 		public struct ChecksumInfo {
-			public int FrameNumber;
-			public int Checksum;
+			public int frameNumber;
+			public int checksum;
 		};
 	}
 }

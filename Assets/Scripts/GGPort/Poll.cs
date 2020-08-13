@@ -19,31 +19,31 @@ namespace GGPort {
 	};
 
 	public class Poll {
-		private const int MAX_POLLABLE_HANDLES = 64;
+		private const int _MAX_POLLABLE_HANDLES = 64;
 
-		private long m_startTime;
-		private readonly int m_handleCount;
-		private readonly WaitHandle[] m_handles; // TODO better as a list? and using .Count over _handle_count
-		private readonly PollSinkCallback[] m_handleSinks;
+		private long _startTime;
+		private readonly int _handleCount;
+		private readonly WaitHandle[] _handles; // TODO better as a list? and using .Count over _handle_count
+		private readonly PollSinkCallback[] _handleSinks;
 
-		private readonly List<PollSinkCallback> m_messageSinks;
-		private readonly List<PollSinkCallback> m_loopSinks;
-		private readonly List<PollPeriodicSinkCallback> m_periodicSinks;
+		private readonly List<PollSinkCallback> _messageSinks;
+		private readonly List<PollSinkCallback> _loopSinks;
+		private readonly List<PollPeriodicSinkCallback> _periodicSinks;
 
 		public Poll() {
-			m_handleCount = 0;
-			m_startTime = 0;
+			_handleCount = 0;
+			_startTime = 0;
 
-			m_handles = new WaitHandle[MAX_POLLABLE_HANDLES];
-			for (m_handleCount = 0; m_handleCount < m_handles.Length; m_handleCount++) {
-				m_handles[m_handleCount] = new EventWaitHandle(false, EventResetMode.ManualReset);
+			_handles = new WaitHandle[_MAX_POLLABLE_HANDLES];
+			for (_handleCount = 0; _handleCount < _handles.Length; _handleCount++) {
+				_handles[_handleCount] = new EventWaitHandle(false, EventResetMode.ManualReset);
 			}
-			
-			m_handleSinks = new PollSinkCallback[MAX_POLLABLE_HANDLES];
-			
-			m_messageSinks = new List<PollSinkCallback>(16);
-			m_loopSinks = new List<PollSinkCallback>(16);
-			m_periodicSinks = new List<PollPeriodicSinkCallback>(16);
+
+			_handleSinks = new PollSinkCallback[_MAX_POLLABLE_HANDLES];
+
+			_messageSinks = new List<PollSinkCallback>(16);
+			_loopSinks = new List<PollSinkCallback>(16);
+			_periodicSinks = new List<PollPeriodicSinkCallback>(16);
 		}
 
 		/*public void RegisterHandle(ref IPollSink sink, ref EventWaitHandle eventWaitHandle, object cookie = null) {
@@ -65,7 +65,7 @@ namespace GGPort {
 		}*/
 
 		public void RegisterLoop(IPollSink sink, object cookie = null) {
-			m_loopSinks.Add(new PollSinkCallback(sink, cookie));
+			_loopSinks.Add(new PollSinkCallback(sink, cookie));
 		}
 
 		/*public void Run() {
@@ -73,52 +73,56 @@ namespace GGPort {
 		}*/
 
 		public bool Pump(long timeout) {
-			const int INFINITE_TIMEOUT = -1;
+			const int _INFINITE_TIMEOUT = -1;
 			bool finished = false;
 
-			if (m_startTime == 0) { m_startTime = Platform.GetCurrentTimeMS(); }
-			
-			long elapsedMS = Platform.GetCurrentTimeMS() - m_startTime;
+			if (_startTime == 0) { _startTime = Platform.GetCurrentTimeMS(); }
+
+			long elapsedMS = Platform.GetCurrentTimeMS() - _startTime;
 			long maxWait = ComputeWaitTime(elapsedMS);
-			if (maxWait != INFINITE_TIMEOUT) {
+			if (maxWait != _INFINITE_TIMEOUT) {
 				timeout = Math.Min(timeout, maxWait);
 			}
 
-			int handleIndex = WaitHandle.WaitAny(m_handles, (int) timeout);
-			if (0 <= handleIndex && handleIndex < m_handleCount) {
-				PollSinkCallback pollSinkCallback = m_handleSinks[handleIndex];
+			int handleIndex = WaitHandle.WaitAny(_handles, (int) timeout);
+			if (0 <= handleIndex && handleIndex < _handleCount) {
+				PollSinkCallback pollSinkCallback = _handleSinks[handleIndex];
 				finished = !pollSinkCallback.pollSink.OnHandlePoll(pollSinkCallback.cookie);
 			}
-			
-			foreach (PollSinkCallback callback in m_messageSinks) { finished = !callback.pollSink.OnMsgPoll(callback.cookie) || finished; }
 
-			foreach (PollPeriodicSinkCallback callback in m_periodicSinks) {
+			foreach (PollSinkCallback callback in _messageSinks) {
+				finished = !callback.pollSink.OnMsgPoll(callback.cookie) || finished;
+			}
+
+			foreach (PollPeriodicSinkCallback callback in _periodicSinks) {
 				if (callback.periodMS + callback.lastFiredTime > elapsedMS) { continue; }
 
-				callback.lastFiredTime = (elapsedMS / callback.periodMS) * callback.periodMS;
+				callback.lastFiredTime = elapsedMS / callback.periodMS * callback.periodMS;
 				finished = !callback.pollSink.OnPeriodicPoll(callback.cookie, callback.lastFiredTime) || finished;
 			}
 
-			foreach (PollSinkCallback callback in m_loopSinks) { finished = !callback.pollSink.OnLoopPoll(callback.cookie) || finished; }
-			
+			foreach (PollSinkCallback callback in _loopSinks) {
+				finished = !callback.pollSink.OnLoopPoll(callback.cookie) || finished;
+			}
+
 			return finished;
 		}
 
 		private long ComputeWaitTime(long elapsed) {
-			const int kInfiniteTimeout = int.MaxValue;
-			long waitTime = kInfiniteTimeout;
-			int count = m_periodicSinks.Count;
+			const int _INFINITE_TIMEOUT = int.MaxValue;
+			long waitTime = _INFINITE_TIMEOUT;
+			int count = _periodicSinks.Count;
 
 			if (count > 0) {
 				for (int i = 0; i < count; i++) {
-					PollPeriodicSinkCallback callback = m_periodicSinks[i];
+					PollPeriodicSinkCallback callback = _periodicSinks[i];
 					long timeout = callback.periodMS + callback.lastFiredTime - elapsed;
-					if (waitTime == kInfiniteTimeout || timeout < waitTime) {
+					if (waitTime == _INFINITE_TIMEOUT || timeout < waitTime) {
 						waitTime = Math.Max(timeout, 0);
-					}         
+					}
 				}
 			}
-			
+
 			return waitTime;
 		}
 
@@ -136,7 +140,8 @@ namespace GGPort {
 			public readonly long periodMS;
 			public long lastFiredTime;
 
-			public PollPeriodicSinkCallback(IPollSink pollSink = null, object cookie = null, int periodMS = 0) : base(pollSink, cookie) {
+			public PollPeriodicSinkCallback(IPollSink pollSink = null, object cookie = null, int periodMS = 0)
+				: base(pollSink, cookie) {
 				this.periodMS = periodMS;
 			}
 		};

@@ -6,16 +6,19 @@ using UnityEngine;
 
 namespace GGPort {
 	public static class LogUtil {
-		private static readonly string ms_FILE_PATH = $"log-{Platform.GetProcessID()}.log";
-		
+		private static readonly string _filePath = $"log-{Platform.GetProcessID()}.log";
+
 		public static event Session.LogTextDelegate logEvent;
 
-		private static long ms_start;
-		private static FileStream ms_logFileStream;
-		private static Queue<string> ms_queue = new Queue<string>();
-		private static bool ms_isWriting;
+		private static long _start;
+		private static FileStream _logFileStream;
+		private static Queue<string> _queue = new Queue<string>();
+		private static bool _isWriting;
 
-		public static void Log(string msg) => Log(msg, false);
+		public static void Log(string msg) {
+			Log(msg, false);
+		}
+
 		private static async void Log(string msg, bool overrideQueue) {
 #if UNITY_EDITOR
 			Debug.Log(msg);
@@ -24,26 +27,26 @@ namespace GGPort {
 				return;
 			}
 
-			if (ms_isWriting && !overrideQueue) {
-				ms_queue.Enqueue(msg);
+			if (isWriting && !overrideQueue) {
+				_queue.Enqueue(msg);
 				return;
 			}
 
-			FileMode fileMode = File.Exists(ms_FILE_PATH)
+			FileMode fileMode = File.Exists(_filePath)
 				? FileMode.Append
 				: FileMode.Create;
 
-			ms_logFileStream = File.Open(ms_FILE_PATH, fileMode);
-			if (fileMode == FileMode.Create) { ms_logFileStream.Dispose(); }
+			_logFileStream = File.Open(_filePath, fileMode);
+			if (fileMode == FileMode.Create) { _logFileStream.Dispose(); }
 
 			string toWrite = "";
 
 			if (Platform.GetConfigBool("ggpo.log.timestamps")) {
 				long t = 0;
-				if (ms_start == 0) {
-					ms_start = Platform.GetCurrentTimeMS();
+				if (_start == 0) {
+					_start = Platform.GetCurrentTimeMS();
 				} else {
-					t = Platform.GetCurrentTimeMS() - ms_start;
+					t = Platform.GetCurrentTimeMS() - _start;
 				}
 
 				toWrite = $"[{t / 1000}.{t % 1000:000}]: ";
@@ -52,18 +55,18 @@ namespace GGPort {
 			toWrite += msg;
 			logEvent?.Invoke(toWrite);
 			byte[] buffer = Encoding.UTF8.GetBytes(toWrite);
-			ms_isWriting = true;
-			await ms_logFileStream.WriteAsync(buffer, 0, buffer.Length);
-			ms_logFileStream.Dispose();
+			isWriting = true;
+			await _logFileStream.WriteAsync(buffer, 0, buffer.Length);
+			_logFileStream.Dispose();
 			ProcessDeferredMessages();
-			ms_isWriting = false;*/
+			isWriting = false;*/
 #endif
 		}
 
 		private static void ProcessDeferredMessages() {
-			if (ms_queue.Count == 0) { return; }
+			if (_queue.Count == 0) { return; }
 
-			Log(ms_queue.Dequeue(), true);
+			Log(_queue.Dequeue(), true);
 		}
 
 		public static void LogFailedAssertToFile(
@@ -75,8 +78,9 @@ namespace GGPort {
 			if (!string.IsNullOrEmpty(callerFilePath)) {
 				string[] callerFilePathSplit = callerFilePath.Split('/', '\\');
 				string fileName = callerFilePathSplit[callerFilePathSplit.Length - 1];
-				
-				msg += $"{Environment.NewLine}{Environment.NewLine}\t\t{nameof(Platform.AssertFailed)} call {(callerLineNumber == -1 ? "In" : "@")} {fileName}";
+
+				msg +=
+					$"{Environment.NewLine}{Environment.NewLine}\t\t{nameof(Platform.AssertFailed)} call {(callerLineNumber == -1 ? "In" : "@")} {fileName}";
 
 				if (callerLineNumber != -1) {
 					msg += $":{callerLineNumber}";
@@ -91,9 +95,11 @@ namespace GGPort {
 		}
 
 		public static void LogException(Exception exception) {
-			Log($"{Environment.NewLine}{Environment.NewLine}"
+			Log(
+				$"{Environment.NewLine}{Environment.NewLine}"
 				+ $"{exception}"
-				+ $"{Environment.NewLine}{Environment.NewLine}");
+				+ $"{Environment.NewLine}{Environment.NewLine}"
+			);
 		}
 	}
 }

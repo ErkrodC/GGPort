@@ -6,7 +6,7 @@ namespace VectorWar {
 			// TODO
 		}
 
-		public static void ggpoutil_perfmon_update(ref Session<TGameState> ggpo, PlayerHandle[] players, int num_players) {
+		public static void ggpoutil_perfmon_update(ref Session<TGameState> ggpo, PlayerHandle[] players, int numPlayers) {
 			// TODO
 		}
 

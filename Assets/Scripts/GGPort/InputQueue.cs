@@ -9,73 +9,77 @@ using System;
 
 namespace GGPort {
 	public class InputQueue {
-		private const int kInputQueueLength = 128;
-		private const int kDefaultInputSize = 4;
+		private const int _INPUT_QUEUE_LENGTH = 128;
+		private const int _DEFAULT_INPUT_SIZE = 4;
 
-		private int id;
-		private int head;
-		private int tail;
-		private int length;
-		private bool firstFrame;
+		private int _id;
+		private int _head;
+		private int _tail;
+		private int _length;
+		private bool _firstFrame;
 
-		private int lastUserAddedFrame;
-		private int lastAddedFrame;
-		private int firstIncorrectFrame;
-		private int lastFrameRequested;
+		private int _lastUserAddedFrame;
+		private int _lastAddedFrame;
+		private int _firstIncorrectFrame;
+		private int _lastFrameRequested;
 
-		private int frameDelay;
+		private int _frameDelay;
 
-		private GameInput[] inputs;
-		private GameInput prediction;
+		private GameInput[] _inputs;
+		private GameInput _prediction;
 
-		public InputQueue(int inputSize = kDefaultInputSize) {
+		public InputQueue(int inputSize = _DEFAULT_INPUT_SIZE) {
 			Init(-1, inputSize);
-			inputs = new GameInput[kInputQueueLength];
+			_inputs = new GameInput[_INPUT_QUEUE_LENGTH];
 		}
 
 		public void Init(int id, int inputSize) {
-			this.id = id;
-			head = 0;
-			tail = 0;
-			length = 0;
-			frameDelay = 0;
-			firstFrame = true;
-			lastUserAddedFrame = GameInput.NULL_FRAME;
-			firstIncorrectFrame = GameInput.NULL_FRAME;
-			lastFrameRequested = GameInput.NULL_FRAME;
-			lastAddedFrame = GameInput.NULL_FRAME;
-			prediction.Init(GameInput.NULL_FRAME, null, inputSize);
+			_id = id;
+			_head = 0;
+			_tail = 0;
+			_length = 0;
+			_frameDelay = 0;
+			_firstFrame = true;
+			_lastUserAddedFrame = GameInput.NULL_FRAME;
+			_firstIncorrectFrame = GameInput.NULL_FRAME;
+			_lastFrameRequested = GameInput.NULL_FRAME;
+			_lastAddedFrame = GameInput.NULL_FRAME;
+			_prediction.Init(GameInput.NULL_FRAME, null, inputSize);
 
 			/*
 			* This is safe because we know the GameInput is a proper structure (as in,
 			* no virtual methods, no contained classes, etc.).
 			*/
 
-			inputs = new GameInput[kInputQueueLength];
-			for (int i = 0; i < inputs.Length; i++) {
-				inputs[i] = default;
+			_inputs = new GameInput[_INPUT_QUEUE_LENGTH];
+			for (int i = 0; i < _inputs.Length; i++) {
+				_inputs[i] = default;
 			}
 
-			for (int j = 0; j < kInputQueueLength; j++) {
-				inputs[j].size = inputSize;
+			for (int j = 0; j < _INPUT_QUEUE_LENGTH; j++) {
+				_inputs[j].size = inputSize;
 			}
 		}
 
 		public int GetLastConfirmedFrame() {
-			Log($"returning last confirmed frame {lastAddedFrame}.{Environment.NewLine}");
-			return lastAddedFrame;
+			Log($"returning last confirmed frame {_lastAddedFrame}.{Environment.NewLine}");
+			return _lastAddedFrame;
 		}
 
 		public int GetFirstIncorrectFrame() {
-			return firstIncorrectFrame;
+			return _firstIncorrectFrame;
 		}
 
-		public int GetLength() { return length; }
+		public int GetLength() {
+			return _length;
+		}
 
-		public void SetFrameDelay(int delay) { frameDelay = delay; }
+		public void SetFrameDelay(int delay) {
+			_frameDelay = delay;
+		}
 
 		public void ResetPrediction(int frame) {
-			Platform.Assert(firstIncorrectFrame == GameInput.NULL_FRAME || frame <= firstIncorrectFrame);
+			Platform.Assert(_firstIncorrectFrame == GameInput.NULL_FRAME || frame <= _firstIncorrectFrame);
 
 			Log($"resetting all prediction errors back to frame {frame}.{Environment.NewLine}");
 
@@ -83,47 +87,47 @@ namespace GGPort {
 			 * There's nothing really to do other than reset our prediction
 			 * state and the incorrect frame counter...
 			 */
-			prediction.frame = GameInput.NULL_FRAME;
-			firstIncorrectFrame = GameInput.NULL_FRAME;
-			lastFrameRequested = GameInput.NULL_FRAME;
+			_prediction.frame = GameInput.NULL_FRAME;
+			_firstIncorrectFrame = GameInput.NULL_FRAME;
+			_lastFrameRequested = GameInput.NULL_FRAME;
 		}
 
 		public void DiscardConfirmedFrames(int frame) {
 			Platform.Assert(frame >= 0);
 
-			if (lastFrameRequested != GameInput.NULL_FRAME) {
-				frame = Math.Min(frame, lastFrameRequested);
+			if (_lastFrameRequested != GameInput.NULL_FRAME) {
+				frame = Math.Min(frame, _lastFrameRequested);
 			}
 
 			Log(
-				$"discarding confirmed frames up to {frame} (last_added:{lastAddedFrame} length:{length} [head:{head} tail:{tail}]).{Environment.NewLine}"
+				$"discarding confirmed frames up to {frame} (last_added:{_lastAddedFrame} length:{_length} [head:{_head} tail:{_tail}]).{Environment.NewLine}"
 			);
 
-			if (frame >= lastAddedFrame) {
-				tail = head;
+			if (frame >= _lastAddedFrame) {
+				_tail = _head;
 			} else {
-				int offset = frame - inputs[tail].frame + 1;
+				int offset = frame - _inputs[_tail].frame + 1;
 
 				Log($"difference of {offset} frames.{Environment.NewLine}");
 				Platform.Assert(offset >= 0);
 
-				tail = (tail + offset) % kInputQueueLength;
-				length -= offset;
+				_tail = (_tail + offset) % _INPUT_QUEUE_LENGTH;
+				_length -= offset;
 			}
 
-			Log($"after discarding, new tail is {tail} (frame:{inputs[tail].frame}).{Environment.NewLine}");
+			Log($"after discarding, new tail is {_tail} (frame:{_inputs[_tail].frame}).{Environment.NewLine}");
 		}
 
 		public bool GetConfirmedInput(int requestedFrame, out GameInput input) {
-			Platform.Assert(firstIncorrectFrame == GameInput.NULL_FRAME || requestedFrame < firstIncorrectFrame);
+			Platform.Assert(_firstIncorrectFrame == GameInput.NULL_FRAME || requestedFrame < _firstIncorrectFrame);
 
-			int offset = requestedFrame % kInputQueueLength;
-			if (inputs[offset].frame != requestedFrame) {
+			int offset = requestedFrame % _INPUT_QUEUE_LENGTH;
+			if (_inputs[offset].frame != requestedFrame) {
 				input = default;
 				return false;
 			}
 
-			input = inputs[offset];
+			input = _inputs[offset];
 			return true;
 		}
 
@@ -135,29 +139,29 @@ namespace GGPort {
 			* error.  Doing so means that we're just going further down the wrong
 			* path.  ASSERT this to verify that it's true.
 			*/
-			Platform.Assert(firstIncorrectFrame == GameInput.NULL_FRAME);
+			Platform.Assert(_firstIncorrectFrame == GameInput.NULL_FRAME);
 
 			/*
 			* Remember the last requested frame number for later.  We'll need
 			* this in AddInput() to drop out of prediction mode.
 			*/
-			lastFrameRequested = requestedFrame;
+			_lastFrameRequested = requestedFrame;
 
-			Platform.Assert(requestedFrame >= inputs[tail].frame);
+			Platform.Assert(requestedFrame >= _inputs[_tail].frame);
 
-			if (prediction.IsNull()) {
+			if (_prediction.IsNull()) {
 				/*
 				* If the frame requested is in our range, fetch it out of the queue and
 				* return it.
 				*/
-				int offset = requestedFrame - inputs[tail].frame;
+				int offset = requestedFrame - _inputs[_tail].frame;
 
-				if (offset < length) {
-					offset = (offset + tail) % kInputQueueLength;
+				if (offset < _length) {
+					offset = (offset + _tail) % _INPUT_QUEUE_LENGTH;
 
-					Platform.Assert(inputs[offset].frame == requestedFrame);
+					Platform.Assert(_inputs[offset].frame == requestedFrame);
 
-					input = inputs[offset];
+					input = _inputs[offset];
 					Log($"returning confirmed frame number {input.frame}.{Environment.NewLine}");
 					return true;
 				}
@@ -169,30 +173,30 @@ namespace GGPort {
 				*/
 				if (requestedFrame == 0) {
 					Log($"basing new prediction frame from nothing, you're client wants frame 0.{Environment.NewLine}");
-					prediction.Erase();
-				} else if (lastAddedFrame == GameInput.NULL_FRAME) {
+					_prediction.Erase();
+				} else if (_lastAddedFrame == GameInput.NULL_FRAME) {
 					Log($"basing new prediction frame from nothing, since we have no frames yet.{Environment.NewLine}");
-					prediction.Erase();
+					_prediction.Erase();
 				} else {
 					Log(
-						$"basing new prediction frame from previously added frame (queue entry:{PreviousFrame(head)}, frame:{inputs[PreviousFrame(head)].frame}).{Environment.NewLine}"
+						$"basing new prediction frame from previously added frame (queue entry:{PreviousFrame(_head)}, frame:{_inputs[PreviousFrame(_head)].frame}).{Environment.NewLine}"
 					);
-					prediction = inputs[PreviousFrame(head)];
+					_prediction = _inputs[PreviousFrame(_head)];
 				}
 
-				prediction.frame++;
+				_prediction.frame++;
 			}
 
-			Platform.Assert(prediction.frame >= 0);
+			Platform.Assert(_prediction.frame >= 0);
 
 			/*
 			* If we've made it this far, we must be predicting.  Go ahead and
 			* forward the prediction frame contents.  Be sure to return the
 			* frame number requested by the client, though.
 			*/
-			input = prediction;
+			input = _prediction;
 			input.frame = requestedFrame;
-			Log($"returning prediction frame number {input.frame} ({prediction.frame}).{Environment.NewLine}");
+			Log($"returning prediction frame number {input.frame} ({_prediction.frame}).{Environment.NewLine}");
 
 			return false;
 		}
@@ -204,9 +208,9 @@ namespace GGPort {
 			* These next two lines simply verify that inputs are passed in 
 			* sequentially by the user, regardless of frame delay.
 			*/
-			Platform.Assert(lastUserAddedFrame == GameInput.NULL_FRAME || input.frame == lastUserAddedFrame + 1);
+			Platform.Assert(_lastUserAddedFrame == GameInput.NULL_FRAME || input.frame == _lastUserAddedFrame + 1);
 
-			lastUserAddedFrame = input.frame;
+			_lastUserAddedFrame = input.frame;
 
 			/*
 			* Move the queue head to the correct point in preparation to
@@ -228,9 +232,11 @@ namespace GGPort {
 		protected int AdvanceQueueHead(int frame) {
 			Log($"advancing queue head to frame {frame}.{Environment.NewLine}");
 
-			int expectedFrame = firstFrame ? 0 : inputs[PreviousFrame(head)].frame + 1;
+			int expectedFrame = _firstFrame
+				? 0
+				: _inputs[PreviousFrame(_head)].frame + 1;
 
-			frame += frameDelay;
+			frame += _frameDelay;
 
 			if (expectedFrame > frame) {
 				/*
@@ -250,12 +256,12 @@ namespace GGPort {
 				* left.
 				*/
 				Log($"Adding padding frame {expectedFrame} to account for change in frame delay.{Environment.NewLine}");
-				
-				AddDelayedInputToQueue(inputs[PreviousFrame(head)], expectedFrame);
+
+				AddDelayedInputToQueue(_inputs[PreviousFrame(_head)], expectedFrame);
 				expectedFrame++;
 			}
 
-			Platform.Assert(frame == 0 || frame == inputs[PreviousFrame(head)].frame + 1);
+			Platform.Assert(frame == 0 || frame == _inputs[PreviousFrame(_head)].frame + 1);
 
 			return frame;
 		}
@@ -263,23 +269,23 @@ namespace GGPort {
 		private void AddDelayedInputToQueue(GameInput input, int frameNumber) {
 			Log($"adding delayed input frame number {frameNumber} to queue.{Environment.NewLine}");
 
-			Platform.Assert(input.size == prediction.size);
-			Platform.Assert(lastAddedFrame == GameInput.NULL_FRAME || frameNumber == lastAddedFrame + 1);
-			Platform.Assert(frameNumber == 0 || inputs[PreviousFrame(head)].frame == frameNumber - 1);
+			Platform.Assert(input.size == _prediction.size);
+			Platform.Assert(_lastAddedFrame == GameInput.NULL_FRAME || frameNumber == _lastAddedFrame + 1);
+			Platform.Assert(frameNumber == 0 || _inputs[PreviousFrame(_head)].frame == frameNumber - 1);
 
 			/*
 			* Add the frame to the back of the queue
 			*/
-			inputs[head] = input;
-			inputs[head].frame = frameNumber;
-			head = (head + 1) % kInputQueueLength;
-			length++;
-			firstFrame = false;
+			_inputs[_head] = input;
+			_inputs[_head].frame = frameNumber;
+			_head = (_head + 1) % _INPUT_QUEUE_LENGTH;
+			_length++;
+			_firstFrame = false;
 
-			lastAddedFrame = frameNumber;
+			_lastAddedFrame = frameNumber;
 
-			if (!prediction.IsNull()) {
-				Platform.Assert(frameNumber == prediction.frame);
+			if (!_prediction.IsNull()) {
+				Platform.Assert(frameNumber == _prediction.frame);
 
 				/*
 				* We've been predicting...  See if the inputs we've gotten match
@@ -287,9 +293,9 @@ namespace GGPort {
 				* remember the first input which was incorrect so we can report it
 				* in GetFirstIncorrectFrame()
 				*/
-				if (firstIncorrectFrame == GameInput.NULL_FRAME && !prediction.Equal(input, true)) {
+				if (_firstIncorrectFrame == GameInput.NULL_FRAME && !_prediction.Equal(input, true)) {
 					Log($"frame {frameNumber} does not match prediction.  marking error.{Environment.NewLine}");
-					firstIncorrectFrame = frameNumber;
+					_firstIncorrectFrame = frameNumber;
 				}
 
 				/*
@@ -298,24 +304,24 @@ namespace GGPort {
 				* of predition mode entirely!  Otherwise, advance the prediction frame
 				* count up.
 				*/
-				if (prediction.frame == lastFrameRequested && firstIncorrectFrame == GameInput.NULL_FRAME) {
+				if (_prediction.frame == _lastFrameRequested && _firstIncorrectFrame == GameInput.NULL_FRAME) {
 					Log("prediction is correct!  dumping out of prediction mode.{Environment.NewLine}");
-					prediction.frame = GameInput.NULL_FRAME;
+					_prediction.frame = GameInput.NULL_FRAME;
 				} else {
-					prediction.frame++;
+					_prediction.frame++;
 				}
 			}
 
-			Platform.Assert(length <= kInputQueueLength);
+			Platform.Assert(_length <= _INPUT_QUEUE_LENGTH);
 		}
 
 		private void Log(string msg) {
-			LogUtil.Log($"input queue{id} | {msg}");
+			LogUtil.Log($"input queue{_id} | {msg}");
 		}
 
 		private static int PreviousFrame(int offset) {
 			return offset == 0
-				? kInputQueueLength - 1
+				? _INPUT_QUEUE_LENGTH - 1
 				: offset - 1;
 		}
 	}
