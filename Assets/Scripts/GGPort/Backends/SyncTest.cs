@@ -13,7 +13,6 @@ namespace GGPort {
 		private bool _isRollingBack;
 		private bool _isRunning;
 		private FileStream _logFile;
-		private string _gameName;
 
 		private GameInput _currentInput;
 		private GameInput _lastInput;
@@ -21,14 +20,13 @@ namespace GGPort {
 
 		public SyncTestBackend(
 			BeginGameDelegate beginGameCallback,
-			SaveGameStateDelegate saveGameStateCallback,
-			LoadGameStateDelegate loadGameStateCallback,
-			LogGameStateDelegate logGameStateCallback,
-			FreeBufferDelegate freeBufferCallback,
+			SaveGameStateDelegate<TGameState> saveGameStateCallback,
+			LoadGameStateDelegate<TGameState> loadGameStateCallback,
+			LogGameStateDelegate<TGameState> logGameStateCallback,
+			FreeBufferDelegate<TGameState> freeBufferCallback,
 			AdvanceFrameDelegate advanceFrameCallback,
 			OnEventDelegate onEventCallback,
 			LogTextDelegate logTextCallback,
-			string gameName,
 			int frames,
 			int numPlayers
 		)
@@ -52,7 +50,6 @@ namespace GGPort {
 			_isRunning = false;
 			_logFile = null;
 			_currentInput.Erase();
-			_gameName = gameName;
 
 			// Initialize the synchronization layer
 			_sync = new Sync<TGameState>(
@@ -65,7 +62,7 @@ namespace GGPort {
 			_sync.freeBufferEvent += freeBufferEvent;
 
 			// Preload the ROM
-			beginGameEvent?.Invoke(gameName);
+			beginGameEvent?.Invoke();
 		}
 
 		public override ErrorCode Idle(int timeout) {

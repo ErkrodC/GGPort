@@ -8,7 +8,7 @@ namespace GGPort {
 	public static class LogUtil {
 		private static readonly string _filePath = $"log-{Platform.GetProcessID()}.log";
 
-		public static event Session.LogTextDelegate logEvent;
+		public static event LogTextDelegate logEvent;
 
 		private static long _start;
 		private static FileStream _logFileStream;

@@ -11,7 +11,7 @@ using UnityEngine;
 namespace VectorWar {
 	// Interface to the vector war application.
 	public static class VectorWar {
-		public static event Session.LogTextDelegate logTextEvent;
+		public static event LogTextDelegate logTextEvent;
 
 		private const int _FRAME_DELAY = 0;
 		private const int _MAX_PLAYERS = 64;
@@ -57,7 +57,6 @@ namespace VectorWar {
 				OnAdvanceFrame,
 				OnEvent,
 				logTextEvent,
-				"VectorWar",
 				numPlayers,
 				sizeof(int),
 				localPort
@@ -105,7 +104,6 @@ namespace VectorWar {
 				OnAdvanceFrame,
 				OnEvent,
 				logTextEvent,
-				"VectorWar",
 				numPlayers,
 				sizeof(int),
 				localPort,
@@ -290,7 +288,7 @@ namespace VectorWar {
 		* The begin game callback.  We don't need to do anything special here,
 		* so just return true.
 		*/
-		public static bool OnBeginGame(string game) {
+		private static bool OnBeginGame() {
 			return true;
 		}
 
@@ -299,7 +297,7 @@ namespace VectorWar {
 		* text at the bottom of the screen to notify the user.
 		*/
 		// TODO refactor to C# events
-		public static bool OnEvent(EventData info) {
+		private static bool OnEvent(EventData info) {
 			switch (info.code) {
 				case EventCode.ConnectedToPeer:
 					_nonGameState.SetConnectState(info.connected.player, PlayerConnectState.Synchronizing);
@@ -341,7 +339,7 @@ namespace VectorWar {
 		* Notification from GGPO we should step forward exactly 1 frame
 		* during a rollback.
 		*/
-		public static bool OnAdvanceFrame(int flags) {
+		private static bool OnAdvanceFrame(int flags) {
 			int[] inputs = new int[GameState.MAX_SHIPS];
 			int disconnectFlags = 0;
 
@@ -353,7 +351,7 @@ namespace VectorWar {
 		}
 
 		// Makes our current state match the state passed in by GGPO.
-		public static bool OnLoadGameState(GameState gameState) {
+		private static bool OnLoadGameState(GameState gameState) {
 			_gameState = gameState;
 			return true;
 		}
@@ -362,7 +360,7 @@ namespace VectorWar {
 		* Save the current state to a buffer and return it to GGPO via the
 		* buffer and len parameters.
 		*/
-		public static bool OnSaveGameState(out GameState gameState, out int checksum, int frame) {
+		private static bool OnSaveGameState(out GameState gameState, out int checksum, int frame) {
 			gameState = (GameState) _gameState.Clone();
 			//_gameState.Serialize(_gameState.Size(), out byte[] buffer); // TODO probably a better way to get the checksum.
 			checksum = _gameState.frameNumber; // ER TODO optional checksum: Fletcher32Checksum(buffer);
@@ -370,7 +368,7 @@ namespace VectorWar {
 		}
 
 		// Log the game state.  Used by the sync test debugging tool.
-		public static bool OnLogGameState(string filename, GameState gameState) {
+		private static bool OnLogGameState(string filename, GameState gameState) {
 			FileStream fp = File.Open(filename, FileMode.OpenOrCreate, FileAccess.Write);
 
 			StringBuilder stringBuilder = new StringBuilder($"GameState object.{Environment.NewLine}");
@@ -410,11 +408,11 @@ namespace VectorWar {
 		}
 
 		// Free a save state buffer previously returned in vw_save_game_state_callback.
-		public static void OnFreeBuffer(object gameState) {
+		private static void OnFreeBuffer(object gameState) {
 			//free(buffer); // NOTE nothing for managed lang, though could prove useful nonetheless.
 		}
 
-		public struct Keybind {
+		private struct Keybind {
 			public KeyCode keyCode;
 			public ShipInput shipInput;
 		}

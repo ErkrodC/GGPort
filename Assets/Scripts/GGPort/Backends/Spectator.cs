@@ -23,14 +23,13 @@ namespace GGPort {
 
 		public SpectatorBackend(
 			BeginGameDelegate beginGameCallback,
-			SaveGameStateDelegate saveGameStateCallback,
-			LoadGameStateDelegate loadGameStateCallback,
-			LogGameStateDelegate logGameStateCallback,
-			FreeBufferDelegate freeBufferCallback,
+			SaveGameStateDelegate<TGameState> saveGameStateCallback,
+			LoadGameStateDelegate<TGameState> loadGameStateCallback,
+			LogGameStateDelegate<TGameState> logGameStateCallback,
+			FreeBufferDelegate<TGameState> freeBufferCallback,
 			AdvanceFrameDelegate advanceFrameCallback,
 			OnEventDelegate onEventCallback,
 			LogTextDelegate logTextCallback,
-			string gameName,
 			ushort localPort,
 			int numPlayers,
 			int inputSize,
@@ -66,7 +65,7 @@ namespace GGPort {
 			_host.Synchronize();
 
 			// Preload the ROM
-			beginGameEvent?.Invoke(gameName);
+			beginGameEvent?.Invoke();
 		}
 
 		public override ErrorCode Idle(int timeout) {

@@ -11,7 +11,7 @@ namespace GGPort {
 	public abstract class Sync {
 		public const int MAX_PREDICTION_FRAMES = 8;
 
-		public Session.AdvanceFrameDelegate advanceFrameEvent;
+		public AdvanceFrameDelegate advanceFrameEvent;
 
 		protected readonly int _numPlayers;
 		protected readonly int _inputSize;
@@ -150,9 +150,9 @@ namespace GGPort {
 	}
 
 	public class Sync<TGameState> : Sync {
-		public event Session<TGameState>.SaveGameStateDelegate saveGameStateEvent;
-		public event Session<TGameState>.LoadGameStateDelegate loadGameStateEvent;
-		public event Session<TGameState>.FreeBufferDelegate freeBufferEvent;
+		public event SaveGameStateDelegate<TGameState> saveGameStateEvent;
+		public event LoadGameStateDelegate<TGameState> loadGameStateEvent;
+		public event FreeBufferDelegate<TGameState> freeBufferEvent;
 
 		private SavedState _savedState;
 

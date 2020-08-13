@@ -28,14 +28,13 @@ namespace GGPort {
 
 		public PeerToPeerBackend(
 			BeginGameDelegate beginGameCallback,
-			SaveGameStateDelegate saveGameStateCallback,
-			LoadGameStateDelegate loadGameStateCallback,
-			LogGameStateDelegate logGameStateCallback,
-			FreeBufferDelegate freeBufferCallback,
+			SaveGameStateDelegate<TGameState> saveGameStateCallback,
+			LoadGameStateDelegate<TGameState> loadGameStateCallback,
+			LogGameStateDelegate<TGameState> logGameStateCallback,
+			FreeBufferDelegate<TGameState> freeBufferCallback,
 			AdvanceFrameDelegate advanceFrameCallback,
 			OnEventDelegate onEventCallback,
 			LogTextDelegate logTextCallback,
-			string gameName,
 			ushort localPort,
 			int numPlayers,
 			int inputSize
@@ -88,7 +87,7 @@ namespace GGPort {
 
 			// Preload the ROM
 			LogUtil.logEvent += logTextEvent;
-			beginGameEvent?.Invoke(gameName);
+			beginGameEvent?.Invoke();
 		}
 
 		~PeerToPeerBackend() {
