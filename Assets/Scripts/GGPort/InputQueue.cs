@@ -10,7 +10,7 @@ using System;
 namespace GGPort {
 	public class InputQueue {
 		private const int _INPUT_QUEUE_LENGTH = 128;
-		private const int _DEFAULT_INPUT_SIZE = 4;
+		private const int _DEFAULT_INPUT_SIZE = 1;
 
 		private int _id;
 		private int _head;

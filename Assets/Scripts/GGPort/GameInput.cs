@@ -15,11 +15,11 @@ namespace GGPort {
 		public const int MAX_BYTES = 9;
 		public const int MAX_PLAYERS = 2;
 		public const int NULL_FRAME = -1;
-		private const int _SIZE_OF_BITS = MAX_BYTES * MAX_PLAYERS;
+		public const int SIZE_OF_BITS = MAX_BYTES * MAX_PLAYERS;
 
 		public int frame;
 		public int size; /* size in bytes of the entire input for all players */
-		public fixed byte bits[MAX_BYTES * MAX_PLAYERS];
+		public fixed byte bits[SIZE_OF_BITS];
 
 		public bool IsNull() {
 			return frame == -1;
@@ -42,7 +42,7 @@ namespace GGPort {
 			this.frame = frame;
 			this.size = size;
 
-			for (int i = 0; i < _SIZE_OF_BITS; i++) { this.bits[i] = 0; }
+			for (int i = 0; i < SIZE_OF_BITS; i++) { this.bits[i] = 0; }
 
 			if (bits == null) { return; }
 
@@ -58,7 +58,7 @@ namespace GGPort {
 			this.frame = frame;
 			this.size = size;
 
-			for (int i = 0; i < _SIZE_OF_BITS; i++) {
+			for (int i = 0; i < SIZE_OF_BITS; i++) {
 				this.bits[i] = 0;
 			}
 
@@ -70,7 +70,7 @@ namespace GGPort {
 		}
 
 		public void Erase() {
-			for (int i = 0; i < _SIZE_OF_BITS; i++) {
+			for (int i = 0; i < SIZE_OF_BITS; i++) {
 				bits[i] = 0;
 			}
 		}

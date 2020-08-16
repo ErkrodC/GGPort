@@ -11,6 +11,7 @@ using UnityEngine.UI;
 namespace VectorWar {
 	public class VectorWarGameManager : MonoBehaviour {
 		[SerializeField] private GameObject gameStartUI;
+		[SerializeField] private GameObject inputTestUI;
 		[SerializeField] private TMP_Text titleText;
 		[SerializeField] private TMP_InputField localPortText;
 		[SerializeField] private TMP_InputField numPlayersText;
@@ -65,7 +66,7 @@ namespace VectorWar {
 			_playerConfigs[0].isLocal = true;
 		}
 
-		private void Update() {
+		private void FixedUpdate() {
 			if (!_started) { return; }
 
 			if (Input.GetKeyUp(KeyCode.P)) {
@@ -87,7 +88,7 @@ namespace VectorWar {
 			if (_now < _next) { return; }
 
 			VectorWar.RunFrame();
-			_next = _now + 1000 / 60;
+			_next = _now + (long) Math.Ceiling(1000f / 60);
 		}
 
 		private void OnStartButton() {
@@ -130,6 +131,9 @@ namespace VectorWar {
 				}*/
 
 				gameStartUI.SetActive(false);
+#if DEBUG_INPUT
+				inputTestUI.SetActive(true);
+#endif
 				VectorWar.Init(localPort, numPlayers, players, 0 /*numSpectators*/);
 			}
 

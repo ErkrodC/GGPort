@@ -1,6 +1,6 @@
 ﻿namespace GGPort {
 	public static class BitVector {
-		public const int BIT_VECTOR_NIBBLE_SIZE = 8;
+		public const int NIBBLE_SIZE = 8;
 
 		public static unsafe bool ReadBit(byte* vector, ref int offset) {
 			bool result = (vector[offset / 8] & (1 << (offset % 8))) != 0;
@@ -21,7 +21,7 @@
 		public static unsafe int ReadNibblet(byte* vector, ref int offset) {
 			int nibblet = 0;
 
-			for (int i = 0; i < BIT_VECTOR_NIBBLE_SIZE; i++) {
+			for (int i = 0; i < NIBBLE_SIZE; i++) {
 #if BIG_ENDIAN // ER TODO how pervasive is this?
 				nibblet |= (vector[offset / 8] & (1 << (offset % 8))) << i;
 #else
@@ -34,9 +34,9 @@
 		}
 
 		public static unsafe void WriteNibblet(byte* vector, int nibble, ref int offset) {
-			Platform.Assert(nibble < 1 << BIT_VECTOR_NIBBLE_SIZE);
+			Platform.Assert(nibble < 1 << NIBBLE_SIZE);
 
-			for (int i = 0; i < BIT_VECTOR_NIBBLE_SIZE; i++) {
+			for (int i = 0; i < NIBBLE_SIZE; i++) {
 				if ((nibble & (1 << i)) != 0) {
 					vector[offset / 8] |= (byte) (1 << (offset % 8));
 					++offset;

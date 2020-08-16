@@ -73,37 +73,37 @@ namespace VectorWar {
 			}
 		}
 
-		public void GetShipAI(int i, out float heading, out float thrust, out int fire) {
+		public void GetShipAI(int i, out float heading, out float thrust, out bool fire) {
 			heading = (ships[i].heading + 5) % 360;
 			thrust = 0;
-			fire = 0;
+			fire = false;
 		}
 
-		public void ParseShipInputs(int inputs, int i, out float heading, out float thrust, out int fire) {
+		public void ParseShipInputs(VectorWar.ShipInput inputMask, int i, out float heading, out float thrust, out bool fire) {
 			Ship ship = ships[i];
 
-			LogUtil.Log($"parsing ship {i} inputs: {inputs}.{Environment.NewLine}");
+			LogUtil.Log($"parsing ship {i} inputMask: {inputMask}.{Environment.NewLine}");
 
-			if ((inputs & (int) VectorWar.ShipInput.CounterClockwise) != 0) {
+			if (inputMask.HasFlag(VectorWar.ShipInput.Clockwise)) {
 				heading = (ship.heading - Ship.ROTATE_INCREMENT) % 360;
-			} else if ((inputs & (int) VectorWar.ShipInput.Clockwise) != 0) {
+			} else if (inputMask.HasFlag(VectorWar.ShipInput.CounterClockwise)) {
 				heading = (ship.heading + Ship.ROTATE_INCREMENT) % 360;
 			} else {
 				heading = ship.heading;
 			}
 
-			if ((inputs & (int) VectorWar.ShipInput.Thrust) != 0) {
+			if (inputMask.HasFlag(VectorWar.ShipInput.Thrust)) {
 				thrust = Ship.SHIP_THRUST;
-			} else if ((inputs & (int) VectorWar.ShipInput.Brake) != 0) {
+			} else if (inputMask.HasFlag(VectorWar.ShipInput.Brake)) {
 				thrust = -Ship.SHIP_THRUST;
 			} else {
 				thrust = 0;
 			}
 
-			fire = inputs & (int) VectorWar.ShipInput.Fire;
+			fire = inputMask.HasFlag(VectorWar.ShipInput.Fire);
 		}
 
-		public void MoveShip(int shipIndex, float heading, float thrust, int fire) {
+		public void MoveShip(int shipIndex, float heading, float thrust, bool fire) {
 			Ship ship = ships[shipIndex];
 
 			LogUtil.Log(
@@ -113,7 +113,7 @@ namespace VectorWar {
 			ship.heading = (int) heading;
 
 			if (ship.cooldown == 0) {
-				if (fire != 0) {
+				if (fire) {
 					LogUtil.Log(
 						$"Firing bullet.{Environment.NewLine}"
 					); // TODO tag based log? to easily enable/disable entire categories
@@ -205,12 +205,12 @@ namespace VectorWar {
 		}
 
 		// NOTE called in VectorWar_AdvanceFrame, which is ggpo's advance_frame callback
-		public void Update(int[] inputs, int disconnectFlags) {
+		public void Update(VectorWar.ShipInput[] inputs, int disconnectFlags) {
 			frameNumber++;
 			for (int i = 0; i < numShips; i++) {
 				float thrust;
 				float heading;
-				int fire;
+				bool fire;
 
 				if ((disconnectFlags & (1 << i)) != 0) {
 					GetShipAI(i, out heading, out thrust, out fire);

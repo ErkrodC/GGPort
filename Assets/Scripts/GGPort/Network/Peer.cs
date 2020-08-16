@@ -11,6 +11,7 @@ using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization.Formatters.Binary;
+using Unity.Collections.LowLevel.Unsafe;
 
 namespace GGPort {
 	public class Peer : IPollSink {
@@ -494,35 +495,27 @@ namespace GGPort {
 
 				Platform.Assert(
 					lastInput.IsNull() || lastInput.frame + 1 == msg.input.startFrame,
-					$"lastInput.IsNull() || lastInput.frame + 1 == msg.input.startFrame{Environment.NewLine}"
-					+ $"{lastInput.IsNull()} || {lastInput.frame} + 1 == {msg.input.startFrame}"
+					string.Format(
+						"lastInput.IsNull() || lastInput.frame + 1 == msg.input.startFrame{0}{1} || {2} + 1 == {3}",
+						Environment.NewLine,
+						lastInput.IsNull(),
+						lastInput.frame,
+						msg.input.startFrame
+					)
 				);
 
 				// set msg.input.bits (i.e. compressed outgoing input queue data)
 				foreach (GameInput pendingInput in _pendingOutgoingInputs) {
-					bool currentEqualsLastBits = true;
-					for (int j = 0; j < pendingInput.size; j++) {
-						if (pendingInput.bits[j] == lastInput.bits[j]) { continue; }
-
-						currentEqualsLastBits = false;
-						break;
-					}
-
-					if (!currentEqualsLastBits) {
-						Platform.Assert(
-							GameInput.MAX_BYTES * GameInput.MAX_PLAYERS * 8 < 1 << BitVector.BIT_VECTOR_NIBBLE_SIZE
-						);
-
-						for (int bitIndex = 0; bitIndex < pendingInput.size * 8; bitIndex++) {
-							Platform.Assert(bitIndex < 1 << BitVector.BIT_VECTOR_NIBBLE_SIZE);
-							bool pendingInputBit = pendingInput[bitIndex];
-							bool lastAckedInputBit = lastInput[bitIndex];
-
-							if (pendingInputBit == lastAckedInputBit) { continue; }
-
-							BitVector.WriteBit(msg.input.bits, ref offset, true);
-							BitVector.WriteBit(msg.input.bits, ref offset, pendingInputBit);
-							BitVector.WriteNibblet(msg.input.bits, bitIndex, ref offset);
+					if (UnsafeUtility.MemCmp(pendingInput.bits, lastInput.bits, pendingInput.size) != 0) {
+						Platform.Assert((GameInput.MAX_BYTES * GameInput.MAX_PLAYERS * 8) < (1 << BitVector.NIBBLE_SIZE));
+						for (int i = 0; i < pendingInput.size * 8; i++) {
+							Platform.Assert(i < (1 << BitVector.NIBBLE_SIZE));
+							bool pendingInputBit = pendingInput[i];
+							if (pendingInputBit != lastInput[i]) {
+								BitVector.WriteBit(msg.input.bits, ref offset, true);
+								BitVector.WriteBit(msg.input.bits, ref offset, pendingInputBit);
+								BitVector.WriteNibblet(msg.input.bits, i, ref offset);
+							}
 						}
 					}
 

@@ -15,26 +15,30 @@ namespace VectorWar {
 
 		private const int _FRAME_DELAY = 0;
 		private const int _MAX_PLAYERS = 64;
+		private const int _SIZE_OF_INPUT = sizeof(ShipInput);
 
 		private static GameState _gameState = new GameState();
 		private static readonly NonGameState _nonGameState = new NonGameState();
 		private static Session<GameState> _session;
+		private static readonly byte[] _serializedSyncedInputArray = new byte[GameState.MAX_SHIPS * _SIZE_OF_INPUT];
+		private static readonly byte[] _serializedLocalInput = new byte[_SIZE_OF_INPUT];
+		private static readonly ShipInput[] _syncedInputArray = new ShipInput[GameState.MAX_SHIPS];
 
 		private static readonly Keybind[] _keyBinds = {
 			new Keybind {keyCode = KeyCode.UpArrow, shipInput = ShipInput.Thrust},
 			new Keybind {keyCode = KeyCode.DownArrow, shipInput = ShipInput.Brake},
-			new Keybind {keyCode = KeyCode.LeftArrow, shipInput = ShipInput.Clockwise},
-			new Keybind {keyCode = KeyCode.RightArrow, shipInput = ShipInput.CounterClockwise},
+			new Keybind {keyCode = KeyCode.LeftArrow, shipInput = ShipInput.CounterClockwise},
+			new Keybind {keyCode = KeyCode.RightArrow, shipInput = ShipInput.Clockwise},
 			new Keybind {keyCode = KeyCode.D, shipInput = ShipInput.Fire},
 			new Keybind {keyCode = KeyCode.S, shipInput = ShipInput.Bomb}
 		};
 
 		[Flags]
-		public enum ShipInput {
+		public enum ShipInput : byte {
 			Thrust = 1,
 			Brake = 1 << 1,
-			Clockwise = 1 << 2,
-			CounterClockwise = 1 << 3,
+			CounterClockwise = 1 << 2,
+			Clockwise = 1 << 3,
 			Fire = 1 << 4,
 			Bomb = 1 << 5
 		}
@@ -58,7 +62,7 @@ namespace VectorWar {
 				OnEvent,
 				logTextEvent,
 				numPlayers,
-				sizeof(int),
+				_SIZE_OF_INPUT,
 				localPort
 			);
 #endif
@@ -138,7 +142,7 @@ namespace VectorWar {
 		* Advances the game state by exactly 1 frame using the inputs specified
 		* for player 1 and player 2.
 		*/
-		public static void AdvanceFrame(int[] inputs, int disconnectFlags) {
+		private static void AdvanceFrame(ShipInput[] inputs, int disconnectFlags) {
 			_gameState.Update(inputs, disconnectFlags);
 
 			// update the checksums to display in the top of the window.  this
@@ -171,43 +175,49 @@ namespace VectorWar {
 		* transparently.
 		*/
 
-		private static int ReadInputs() {
-			int i, inputs = 0;
+		private static ShipInput ReadInputs() {
+			ShipInput inputs = 0;
 
-			for (i = 0; i < _keyBinds.Length; i++) {
-				if (Input.GetKey(_keyBinds[i].keyCode)) {
-					inputs |= (int) _keyBinds[i].shipInput;
+#if DEBUG_INPUT
+			foreach (Keybind keyBind in _keyBinds) {
+				KeyCode keyCode = keyBind.keyCode;
+
+				if (InputTest.testInputIsOnByKey.Contains(keyCode)) {
+					inputs |= keyBind.shipInput;
+					InputTest.UseTestInput();
+				} else if (Input.GetKey(keyCode)) {
+					inputs |= keyBind.shipInput;
 				}
 			}
-
+#else
+			foreach (Keybind keyBind in _keyBinds) {
+				if (Input.GetKey(keyBind.keyCode)) {
+					inputs |= keyBind.shipInput;
+				}
+			}
+#endif
+			
 			return inputs;
 		}
 
 		// Run a single frame of the game.
-		private static readonly byte[] _serializedInput = new byte[4];
-		private static readonly int[] _inputs = new int[GameState.MAX_SHIPS];
-
 		public static void RunFrame() {
 			ErrorCode result = ErrorCode.Success;
 			int disconnectFlags = 0;
 
-			for (int i = 0; i < GameState.MAX_SHIPS; i++) { _inputs[i] = 0; }
-
 			if (_nonGameState.localPlayerHandle.handleValue != PlayerHandle.INVALID_HANDLE) {
-				int input = ReadInputs();
+				ShipInput input = ReadInputs();
 #if SYNC_TEST
 				input = rand(); // test: use random inputs to demonstrate sync testing
 #endif
-				_serializedInput[0] = (byte) input;
-				_serializedInput[1] = (byte) (input >> 8);
-				_serializedInput[2] = (byte) (input >> 16);
-				_serializedInput[3] = (byte) (input >> 24);
+				// ER TODO generalize for varying sizes
+				_serializedLocalInput[0] = (byte) input;
 
 				// XXX LOH size should 4 bytes? check inside, erroneously using serializedInputLength?
 				result = _session.AddLocalInput(
 					_nonGameState.localPlayerHandle,
-					_serializedInput,
-					sizeof(int)
+					_serializedLocalInput,
+					sizeof(ShipInput)
 				); // NOTE hardcoding input type
 			}
 
@@ -215,11 +225,11 @@ namespace VectorWar {
 			// ggpo will modify the input list with the correct inputs to use and
 			// return 1.
 			if (result.IsSuccess()) {
-				result = _session.SynchronizeInput(_inputs, sizeof(int) * GameState.MAX_SHIPS, ref disconnectFlags);
+				result = _session.SynchronizeInput(_serializedSyncedInputArray, _serializedSyncedInputArray.Length, ref disconnectFlags);
 				if (result.IsSuccess()) {
 					// inputs[0] and inputs[1] contain the inputs for p1 and p2.  Advance
 					// the game by 1 frame using those inputs.
-					AdvanceFrame(_inputs, disconnectFlags);
+					AdvanceFrame(DeserializeShipInputs(_serializedSyncedInputArray), disconnectFlags);
 				}
 			}
 
@@ -340,14 +350,28 @@ namespace VectorWar {
 		* during a rollback.
 		*/
 		private static bool OnAdvanceFrame(int flags) {
-			int[] inputs = new int[GameState.MAX_SHIPS];
+			for (int i = 0; i < _serializedSyncedInputArray.Length; i++) { _serializedSyncedInputArray[i] = 0; }
+
 			int disconnectFlags = 0;
 
 			// Make sure we fetch new inputs from GGPO and use those to update
 			// the game state instead of reading from the keyboard.
-			_session.SynchronizeInput(inputs, sizeof(int) * GameState.MAX_SHIPS, ref disconnectFlags);
-			AdvanceFrame(inputs, disconnectFlags);
+			// ER NOTE SynchronizeInput expects an array of primitives, TODO allow handling of enum arrays (i.e. flags)
+			_session.SynchronizeInput(_serializedSyncedInputArray, _serializedSyncedInputArray.Length, ref disconnectFlags);
+			AdvanceFrame(DeserializeShipInputs(_serializedSyncedInputArray), disconnectFlags);
 			return true;
+		}
+
+		private static ShipInput[] DeserializeShipInputs(byte[] serializedInputs) {
+			for (int i = 0; i < _syncedInputArray.Length; i++) { _syncedInputArray[i] = 0; }
+
+			for (int i = 0; i < serializedInputs.Length; i++) {
+				// ER TODO generalize for ship input size in bytes, this is done only because synchronize inputs doesn't
+				// handle non primitive arrays, see VectorWar::OnAdvanceFrame
+				_syncedInputArray[i] = (ShipInput) serializedInputs[i];
+			}
+
+			return _syncedInputArray;
 		}
 
 		// Makes our current state match the state passed in by GGPO.

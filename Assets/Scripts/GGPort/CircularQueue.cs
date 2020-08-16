@@ -19,7 +19,7 @@ namespace GGPort {
 			count = 0;
 		}
 
-		public T this[int i] {
+		private T this[int i] {
 			get {
 				Platform.Assert(i < count);
 

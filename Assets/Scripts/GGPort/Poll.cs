@@ -79,7 +79,15 @@ namespace GGPort {
 			if (_startTime == 0) { _startTime = Platform.GetCurrentTimeMS(); }
 
 			long elapsedMS = Platform.GetCurrentTimeMS() - _startTime;
-			long maxWait = ComputeWaitTime(elapsedMS);
+			long maxWait = _INFINITE_TIMEOUT;
+
+			foreach (PollPeriodicSinkCallback callback in _periodicSinks) {
+				long callbackCooldownRemaining = callback.periodMS + callback.lastFiredTime - elapsedMS;
+				if (maxWait == _INFINITE_TIMEOUT || callbackCooldownRemaining < maxWait) {
+					maxWait = Math.Max(callbackCooldownRemaining, 0);
+				}
+			}
+
 			if (maxWait != _INFINITE_TIMEOUT) {
 				timeout = Math.Min(timeout, maxWait);
 			}
@@ -97,7 +105,7 @@ namespace GGPort {
 			foreach (PollPeriodicSinkCallback callback in _periodicSinks) {
 				if (callback.periodMS + callback.lastFiredTime > elapsedMS) { continue; }
 
-				callback.lastFiredTime = elapsedMS / callback.periodMS * callback.periodMS;
+				callback.lastFiredTime = elapsedMS - elapsedMS % 2;
 				finished = !callback.pollSink.OnPeriodicPoll(callback.cookie, callback.lastFiredTime) || finished;
 			}
 
@@ -106,24 +114,6 @@ namespace GGPort {
 			}
 
 			return finished;
-		}
-
-		private long ComputeWaitTime(long elapsed) {
-			const int _INFINITE_TIMEOUT = int.MaxValue;
-			long waitTime = _INFINITE_TIMEOUT;
-			int count = _periodicSinks.Count;
-
-			if (count > 0) {
-				for (int i = 0; i < count; i++) {
-					PollPeriodicSinkCallback callback = _periodicSinks[i];
-					long timeout = callback.periodMS + callback.lastFiredTime - elapsed;
-					if (waitTime == _INFINITE_TIMEOUT || timeout < waitTime) {
-						waitTime = Math.Max(timeout, 0);
-					}
-				}
-			}
-
-			return waitTime;
 		}
 
 		protected class PollSinkCallback {
