@@ -13,7 +13,7 @@ using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
 
 namespace GGPort {
-	public class Transport : IPollSink {
+	public class Transport : IUpdateHandler {
 		public const int MAX_UDP_ENDPOINTS = 16;
 
 		// TODO readdress serialization, no need for type data to be sent with custom protocol
@@ -23,13 +23,14 @@ namespace GGPort {
 
 		// Network transmission information
 		private Socket _socket;
+		private byte[] _receiveBuffer = new byte[_MAX_UDP_PACKET_SIZE];
 
 		private static void Log(string msg) {
 			LogUtil.Log($"{nameof(Transport)} | {msg}");
 		}
 
-		public Transport(ushort port, Poll poll) {
-			poll.RegisterLoop(this);
+		public Transport(ushort port, FrameUpdater frameUpdater) {
+			frameUpdater.Register(this);
 
 			Log($"binding udp socket to port {port}.{Environment.NewLine}");
 			_socket = CreateSocket(port, 0);
@@ -54,8 +55,29 @@ namespace GGPort {
 			return sentBytes;
 		}
 
-		public bool OnLoopPoll(object cookie) {
-			byte[] receiveBuffer = new byte[_MAX_UDP_PACKET_SIZE];
+		private static Socket CreateSocket(ushort portToBindTo, int retries) {
+			Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+			socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, 1);
+			socket.Blocking = false;
+
+			for (ushort port = portToBindTo; port <= portToBindTo + retries; port++) {
+				try {
+					socket.Bind(new IPEndPoint(IPAddress.Any, port));
+					Log($"Udp bound to port: {port}.{Environment.NewLine}");
+					return socket;
+				} catch (Exception exception) {
+					Platform.AssertFailed(exception); // TODO this kills retry attempts
+				}
+			}
+
+			socket.Close();
+			return null;
+		}
+
+		#region IUpdateHandler
+
+		public bool OnUpdate() {
+			for (int i = 0; i < _receiveBuffer.Length; i++) { _receiveBuffer[i] = 0; }
 
 			EndPoint remoteEP = new IPEndPoint(IPAddress.Any, 0);
 
@@ -63,12 +85,12 @@ namespace GGPort {
 				try {
 					if (_socket.Available == 0) { break; }
 
-					int len = _socket.ReceiveFrom(receiveBuffer, _MAX_UDP_PACKET_SIZE, SocketFlags.None, ref remoteEP);
+					int len = _socket.ReceiveFrom(_receiveBuffer, _MAX_UDP_PACKET_SIZE, SocketFlags.None, ref remoteEP);
 
 					if (remoteEP is IPEndPoint remoteIP) {
 						Log($"recvfrom returned (len:{len}  from:{remoteIP.Address}:{remoteIP.Port}).{Environment.NewLine}");
 						IFormatter br = new BinaryFormatter();
-						using (MemoryStream ms = new MemoryStream(receiveBuffer)) {
+						using (MemoryStream ms = new MemoryStream(_receiveBuffer)) {
 							PeerMessage msg =
 								(PeerMessage) br.Deserialize(
 									ms
@@ -89,36 +111,7 @@ namespace GGPort {
 			return true;
 		}
 
-		private static Socket CreateSocket(ushort portToBindTo, int retries) {
-			Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-			socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, 1);
-			socket.Blocking = false;
-
-			for (ushort port = portToBindTo; port <= portToBindTo + retries; port++) {
-				try {
-					socket.Bind(new IPEndPoint(IPAddress.Any, port));
-					Log($"Udp bound to port: {port}.{Environment.NewLine}");
-					return socket;
-				} catch (Exception exception) {
-					Platform.AssertFailed(exception); // TODO this kills retry attempts
-				}
-			}
-
-			socket.Close();
-			return null;
-		}
-
-		public bool OnHandlePoll(object cookie) {
-			return true;
-		}
-
-		public bool OnMsgPoll(object cookie) {
-			return true;
-		}
-
-		public bool OnPeriodicPoll(object cookie, long lastFireTime) {
-			return true;
-		}
+		#endregion
 
 		// TODO rename after perf tools up
 		public struct Stats {

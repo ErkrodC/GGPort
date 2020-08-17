@@ -183,9 +183,9 @@ namespace GGPort {
 		}
 
 		public void CheckSimulation(int timeout) {
-			if (!CheckSimulationConsistency(out int seekTo)) {
-				AdjustSimulation(seekTo);
-			}
+			if (CheckSimulationConsistency(out int seekTo)) { return; }
+
+			AdjustSimulation(seekTo);
 		}
 
 		public void AdjustSimulation(int seekTo) {

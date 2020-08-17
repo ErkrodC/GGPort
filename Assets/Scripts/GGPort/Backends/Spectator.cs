@@ -9,10 +9,10 @@ using System;
 using System.Net;
 
 namespace GGPort {
-	public class SpectatorBackend<TGameState> : Session<TGameState>, IPollSink {
+	public class SpectatorBackend<TGameState> : Session<TGameState> {
 		private const int _SPECTATOR_FRAME_BUFFER_SIZE = 64;
 
-		private readonly Poll _poll;
+		private readonly FrameUpdater _frameUpdater;
 		private readonly Transport _transport;
 		private readonly Peer _host;
 		private readonly int _inputSize;
@@ -55,13 +55,13 @@ namespace GGPort {
 			for (int i = 0; i < _inputs.Length; i++) { _inputs[i].frame = -1; }
 
 			// Initialize the UDP port
-			_poll = new Poll();
-			_transport = new Transport(localPort, _poll);
+			_frameUpdater = new FrameUpdater();
+			_transport = new Transport(localPort, _frameUpdater);
 			_transport.messageReceivedEvent += OnMessageReceived;
 
 			// Init the host endpoint
 			_host = new Peer();
-			_host.Init(ref _transport, ref _poll, 0, hostEndPoint, null); // TODO maybe remove init and set with ctor?
+			_host.Init(ref _transport, ref _frameUpdater, 0, hostEndPoint, null); // TODO maybe remove init and set with ctor?
 			_host.Synchronize();
 
 			// Preload the ROM
@@ -69,7 +69,7 @@ namespace GGPort {
 		}
 
 		public override ErrorCode Idle(int timeout) {
-			_poll.Pump(0);
+			_frameUpdater.Update();
 
 			PollUdpProtocolEvents();
 			return ErrorCode.Success;
@@ -218,22 +218,6 @@ namespace GGPort {
 					break;
 				}
 			}
-		}
-
-		public virtual bool OnHandlePoll(object cookie) {
-			return true;
-		}
-
-		public virtual bool OnMsgPoll(object cookie) {
-			return true;
-		}
-
-		public virtual bool OnPeriodicPoll(object cookie, long lastFireTime) {
-			return true;
-		}
-
-		public virtual bool OnLoopPoll(object cookie) {
-			return true;
 		}
 	}
 }

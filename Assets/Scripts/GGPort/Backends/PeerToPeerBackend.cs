@@ -3,12 +3,12 @@ using System.Net;
 using System.Threading;
 
 namespace GGPort {
-	public class PeerToPeerBackend<TGameState> : Session<TGameState>, IPollSink {
+	public class PeerToPeerBackend<TGameState> : Session<TGameState> {
 		private const int _RECOMMENDATION_INTERVAL = 240;
 		private const int _DEFAULT_DISCONNECT_TIMEOUT = 5000;
 		private const int _DEFAULT_DISCONNECT_NOTIFY_START = 750;
 
-		private Poll _poll;
+		private FrameUpdater _frameUpdater;
 		private readonly Sync<TGameState> _sync;
 		private Transport _transport;
 		private Peer[] _endpoints;
@@ -68,8 +68,8 @@ namespace GGPort {
 			_nextRecommendedSleep = 0;
 
 			// Initialize the UDP port
-			_poll = new Poll(); // TODO pry need to do the same in other backend classes
-			_transport = new Transport(localPort, _poll);
+			_frameUpdater = new FrameUpdater();
+			_transport = new Transport(localPort, _frameUpdater);
 			_transport.messageReceivedEvent += OnMessageReceived;
 
 			_endpoints = new Peer[_numPlayers];
@@ -98,7 +98,7 @@ namespace GGPort {
 		public override unsafe ErrorCode Idle(int timeout) {
 			if (_sync.InRollback()) { return ErrorCode.Success; }
 
-			_poll.Pump(0);
+			_frameUpdater.Update();
 
 			PollUdpProtocolEvents();
 
@@ -552,7 +552,7 @@ namespace GGPort {
 			// Start the state machine (xxx: no)
 			_synchronizing = true;
 
-			_endpoints[queue].Init(ref _transport, ref _poll, queue, remoteEndPoint, _localConnectStatuses);
+			_endpoints[queue].Init(ref _transport, ref _frameUpdater, queue, remoteEndPoint, _localConnectStatuses);
 			_endpoints[queue].SetDisconnectTimeout(_disconnectTimeout);
 			_endpoints[queue].SetDisconnectNotifyStart(_disconnectNotifyStart);
 			_endpoints[queue].Synchronize();
@@ -570,7 +570,7 @@ namespace GGPort {
 
 			int queue = _numSpectators++;
 
-			_spectators[queue].Init(ref _transport, ref _poll, queue + 1000, remoteEndPoint, _localConnectStatuses);
+			_spectators[queue].Init(ref _transport, ref _frameUpdater, queue + 1000, remoteEndPoint, _localConnectStatuses);
 			_spectators[queue].SetDisconnectTimeout(_disconnectTimeout);
 			_spectators[queue].SetDisconnectNotifyStart(_disconnectNotifyStart);
 			_spectators[queue].Synchronize();
@@ -690,22 +690,6 @@ namespace GGPort {
 
 					break;
 			}
-		}
-
-		public virtual bool OnHandlePoll(object cookie) {
-			return true;
-		}
-
-		public virtual bool OnMsgPoll(object cookie) {
-			return true;
-		}
-
-		public virtual bool OnPeriodicPoll(object cookie, long lastFireTime) {
-			return true;
-		}
-
-		public virtual bool OnLoopPoll(object cookie) {
-			return true;
 		}
 	};
 }

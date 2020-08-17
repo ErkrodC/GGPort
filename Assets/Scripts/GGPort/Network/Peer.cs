@@ -14,7 +14,7 @@ using System.Runtime.Serialization.Formatters.Binary;
 using Unity.Collections.LowLevel.Unsafe;
 
 namespace GGPort {
-	public class Peer : IPollSink {
+	public class Peer : IUpdateHandler {
 		private const int _UDP_HEADER_SIZE = 28; // Size of IP + UDP headers
 		private const uint _NUM_SYNC_PACKETS = 5;
 		private const uint _SYNC_RETRY_INTERVAL = 2000;
@@ -145,7 +145,7 @@ namespace GGPort {
 		// TODO last param is list?
 		public void Init(
 			ref Transport transport,
-			ref Poll poll,
+			ref FrameUpdater frameUpdater,
 			int queueID,
 			IPEndPoint endPoint,
 			PeerMessage.ConnectStatus[] statuses
@@ -163,7 +163,7 @@ namespace GGPort {
 				); // TODO this class should hold a Random type var
 			} while (_magicNumber == 0);
 
-			poll.RegisterLoop(this);
+			frameUpdater.Register(this);
 		}
 
 		public void Synchronize() {
@@ -769,19 +769,9 @@ namespace GGPort {
 			return true;
 		}
 
-		public virtual bool OnHandlePoll(object cookie) {
-			return true;
-		}
+		#region IUpdateHandler
 
-		public virtual bool OnMsgPoll(object cookie) {
-			return true;
-		}
-
-		public virtual bool OnPeriodicPoll(object cookie, long lastFireTime) {
-			return true;
-		}
-
-		public virtual bool OnLoopPoll(object cookie) {
+		public virtual bool OnUpdate() {
 			if (_transport == null) {
 				return true;
 			}
@@ -880,6 +870,8 @@ namespace GGPort {
 
 			return true;
 		}
+
+		#endregion
 
 		// TODO rename once perf tools are up
 		public struct Stats {
