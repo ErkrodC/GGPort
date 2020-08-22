@@ -79,28 +79,28 @@ namespace VectorWar {
 			fire = false;
 		}
 
-		public void ParseShipInputs(VectorWar.ShipInput inputMask, int i, out float heading, out float thrust, out bool fire) {
+		public void ParseShipInputs(VectorWar.ShipInput inputFlags, int i, out float heading, out float thrust, out bool fire) {
 			Ship ship = ships[i];
 
-			LogUtil.Log($"parsing ship {i} inputMask: {inputMask}.{Environment.NewLine}");
+			LogUtil.Log($"parsing ship {i} inputFlags: {inputFlags}.{Environment.NewLine}");
 
-			if (inputMask.HasFlag(VectorWar.ShipInput.Clockwise)) {
+			if (inputFlags.HasFlag(VectorWar.ShipInput.Clockwise)) {
 				heading = (ship.heading - Ship.ROTATE_INCREMENT) % 360;
-			} else if (inputMask.HasFlag(VectorWar.ShipInput.CounterClockwise)) {
+			} else if (inputFlags.HasFlag(VectorWar.ShipInput.CounterClockwise)) {
 				heading = (ship.heading + Ship.ROTATE_INCREMENT) % 360;
 			} else {
 				heading = ship.heading;
 			}
 
-			if (inputMask.HasFlag(VectorWar.ShipInput.Thrust)) {
+			if (inputFlags.HasFlag(VectorWar.ShipInput.Thrust)) {
 				thrust = Ship.SHIP_THRUST;
-			} else if (inputMask.HasFlag(VectorWar.ShipInput.Brake)) {
+			} else if (inputFlags.HasFlag(VectorWar.ShipInput.Brake)) {
 				thrust = -Ship.SHIP_THRUST;
 			} else {
 				thrust = 0;
 			}
 
-			fire = inputMask.HasFlag(VectorWar.ShipInput.Fire);
+			fire = inputFlags.HasFlag(VectorWar.ShipInput.Fire);
 		}
 
 		public void MoveShip(int shipIndex, float heading, float thrust, bool fire) {

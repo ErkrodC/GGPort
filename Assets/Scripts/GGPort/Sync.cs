@@ -182,7 +182,7 @@ namespace GGPort {
 			_inputQueues[queue].AddInput(ref input);
 		}
 
-		public void CheckSimulation(int timeout) {
+		public void CheckSimulation() {
 			if (CheckSimulationConsistency(out int seekTo)) { return; }
 
 			AdjustSimulation(seekTo);

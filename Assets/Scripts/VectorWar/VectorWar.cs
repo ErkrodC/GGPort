@@ -5,6 +5,7 @@ using System.Text;
 using GGPort;
 using System.Threading;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 //#define SYNC_TEST    // test: turn on synctest
 
@@ -35,7 +36,8 @@ namespace VectorWar {
 
 		[Flags]
 		public enum ShipInput : byte {
-			Thrust = 1,
+			None = 0,
+			Thrust = 1 << 0,
 			Brake = 1 << 1,
 			CounterClockwise = 1 << 2,
 			Clockwise = 1 << 3,
@@ -148,8 +150,8 @@ namespace VectorWar {
 			// update the checksums to display in the top of the window.  this
 			// helps to detect desyncs.
 			_nonGameState.now.frameNumber = _gameState.frameNumber;
-			_nonGameState.now.checksum =
-				_gameState.frameNumber; // ER TODO Fletcher32Checksum(_gameState.Serialize());
+			// ER TODO Fletcher32Checksum(_gameState.Serialize());
+			_nonGameState.now.checksum = _gameState.frameNumber;
 			if (_gameState.frameNumber % 90 == 0) {
 				_nonGameState.periodic = _nonGameState.now;
 			}
@@ -175,27 +177,14 @@ namespace VectorWar {
 		* transparently.
 		*/
 
+		private static bool _triggered;
 		private static ShipInput ReadInputs() {
-			ShipInput inputs = 0;
-
-#if DEBUG_INPUT
-			foreach (Keybind keyBind in _keyBinds) {
-				KeyCode keyCode = keyBind.keyCode;
-
-				if (InputTest.testInputIsOnByKey.Contains(keyCode)) {
-					inputs |= keyBind.shipInput;
-					InputTest.UseTestInput();
-				} else if (Input.GetKey(keyCode)) {
-					inputs |= keyBind.shipInput;
-				}
+			ShipInput inputs = ShipInput.None;
+			
+			InputActionMap shipBattleActionMap = VectorWarGameManager.vectorWarInput.ShipBattleMap.Get();
+			for (int i = 0; i < shipBattleActionMap.actions.Count; i++) {
+				inputs |= (ShipInput) ((int) shipBattleActionMap.actions[i].ReadValue<float>() << i);
 			}
-#else
-			foreach (Keybind keyBind in _keyBinds) {
-				if (Input.GetKey(keyBind.keyCode)) {
-					inputs |= keyBind.shipInput;
-				}
-			}
-#endif
 			
 			return inputs;
 		}
@@ -206,12 +195,11 @@ namespace VectorWar {
 			int disconnectFlags = 0;
 
 			if (_nonGameState.localPlayerHandle.handleValue != PlayerHandle.INVALID_HANDLE) {
-				ShipInput input = ReadInputs();
 #if SYNC_TEST
 				input = rand(); // test: use random inputs to demonstrate sync testing
 #endif
 				// ER TODO generalize for varying sizes
-				_serializedLocalInput[0] = (byte) input;
+				_serializedLocalInput[0] = (byte) ReadInputs();
 
 				// XXX LOH size should 4 bytes? check inside, erroneously using serializedInputLength?
 				result = _session.AddLocalInput(

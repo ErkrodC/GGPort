@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Net;
 using GGPort;
 using TMPro;
@@ -11,7 +10,6 @@ using UnityEngine.UI;
 namespace VectorWar {
 	public class VectorWarGameManager : MonoBehaviour {
 		[SerializeField] private GameObject gameStartUI;
-		[SerializeField] private GameObject inputTestUI;
 		[SerializeField] private TMP_Text titleText;
 		[SerializeField] private TMP_InputField localPortText;
 		[SerializeField] private TMP_InputField numPlayersText;
@@ -20,13 +18,10 @@ namespace VectorWar {
 		[SerializeField] private Transform playerConfsContainer;
 		[SerializeField] private GameObject playerConfPrefab;
 		[SerializeField] private Button startButton;
+
+		public static VectorWarInput vectorWarInput;
+		
 		private readonly List<PlayerConfig> _playerConfigs = new List<PlayerConfig>();
-
-		private long _start;
-		private long _next;
-		private long _now;
-		private bool _started;
-
 		private readonly KeyCode[] _fKeys = {
 			KeyCode.F1,
 			KeyCode.F2,
@@ -40,6 +35,8 @@ namespace VectorWar {
 			KeyCode.F10,
 			KeyCode.F12
 		};
+
+		private bool _started;
 
 		private void Awake() {
 			titleText.text = $"(pid:{Platform.GetProcessID()} GGPort SDK Sample: Vector War)";
@@ -64,31 +61,36 @@ namespace VectorWar {
 			localPortText.text = "5556";
 #endif
 			_playerConfigs[0].isLocal = true;
+
+			vectorWarInput = new VectorWarInput();
+			vectorWarInput.GlobalMap.Enable();
+			vectorWarInput.ShipBattleMap.Enable();
 		}
 
-		private void FixedUpdate() {
+		private void Update() {
 			if (!_started) { return; }
 
-			if (Input.GetKeyUp(KeyCode.P)) {
+			if (vectorWarInput.GlobalMap.TogglePerformanceMonitoring.triggered) {
 				PerfMon<GameState>.ggpoutil_perfmon_toggle();
-			} else if (Input.GetKeyUp(KeyCode.Escape)) {
+			} else if (vectorWarInput.GlobalMap.QuitApplication.triggered) {
 				VectorWar.Exit();
 				Application.Quit();
 			} else {
-				foreach (KeyCode fKey in _fKeys) {
+				/*foreach (KeyCode fKey in _fKeys) {
 					if (!Input.GetKeyUp(fKey)) { continue; }
 
 					int playerIndex = int.Parse(fKey.ToString().Split('F')[1]) - 1;
 					VectorWar.DisconnectPlayer(playerIndex);
-				}
+				}*/
 			}
+			
+			VectorWar.Idle(0);
+		}
 
-			_now = Platform.GetCurrentTimeMS();
-			VectorWar.Idle((int) Math.Max(0, _next - _now - 1));
-			if (_now < _next) { return; }
-
+		private void FixedUpdate() {
+			if (!_started) { return; }
+			
 			VectorWar.RunFrame();
-			_next = _now + (long) Math.Ceiling(1000f / 60);
 		}
 
 		private void OnStartButton() {
@@ -131,16 +133,9 @@ namespace VectorWar {
 				}*/
 
 				gameStartUI.SetActive(false);
-#if DEBUG_INPUT
-				inputTestUI.SetActive(true);
-#endif
 				VectorWar.Init(localPort, numPlayers, players, 0 /*numSpectators*/);
 			}
-
-			_start = Platform.GetCurrentTimeMS();
-			_next = _start;
-			_now = _start;
-
+			
 			_started = true;
 		}
 

@@ -21,7 +21,7 @@ namespace GGPort {
 
 		private static async void Log(string msg, bool overrideQueue) {
 #if UNITY_EDITOR
-			Debug.Log(msg);
+			//Debug.Log(msg);
 #elif DEBUG || DEVELOPMENT_BUILD
 			/*if (!Platform.GetConfigBool("ggpo.log") || Platform.GetConfigBool("ggpo.log.ignore")) {
 				return;

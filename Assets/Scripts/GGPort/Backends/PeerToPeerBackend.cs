@@ -104,7 +104,7 @@ namespace GGPort {
 
 			if (_synchronizing) { return ErrorCode.Success; }
 
-			_sync.CheckSimulation(timeout);
+			_sync.CheckSimulation();
 
 			// notify all of our endpoints of their local frame number for their
 			// next connection quality report
@@ -163,9 +163,7 @@ namespace GGPort {
 			}
 
 			// XXX: this is obviously a farce...
-			if (timeout != 0) {
-				Thread.Sleep(1);
-			}
+			if (timeout > 0) { Thread.Sleep(timeout); }
 
 			return ErrorCode.Success;
 		}

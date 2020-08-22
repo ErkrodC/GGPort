@@ -23,9 +23,9 @@
 
 			for (int i = 0; i < NIBBLE_SIZE; i++) {
 #if BIG_ENDIAN // ER TODO how pervasive is this?
-				nibblet |= (vector[offset / 8] & (1 << (offset % 8))) << i;
+				nibblet |= (vector[offset / NIBBLE_SIZE] & (1 << (offset % NIBBLE_SIZE))) << i;
 #else
-				nibblet |= (vector[offset / 8] & (1 << (offset % 8))) >> (offset - i);
+				nibblet |= (vector[offset / NIBBLE_SIZE] & (1 << (offset % NIBBLE_SIZE))) >> (offset % NIBBLE_SIZE - i);
 #endif
 				++offset;
 			}
