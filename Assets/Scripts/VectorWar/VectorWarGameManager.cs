@@ -3,6 +3,7 @@ using System.Net;
 using GGPort;
 using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 #pragma warning disable 0649
@@ -99,7 +100,15 @@ namespace VectorWar {
 
 			if (spectateModeToggle.isOn) {
 				IPEndPoint hostEndPoint = hostIPText.GetIPEndPoint();
-				VectorWar.InitSpectator(localPort, numPlayers, hostEndPoint);
+				VectorWar.InitSpectator(
+					localPort,
+					numPlayers,
+					hostEndPoint,
+					Screen.safeArea.xMin,
+					Screen.safeArea.xMax,
+					Screen.safeArea.yMin,
+					Screen.safeArea.yMax
+				);
 			} else {
 				Player[] players = new Player[GGPort.Types.MAX_SPECTATORS + GGPort.Types.MAX_PLAYERS];
 
@@ -133,7 +142,17 @@ namespace VectorWar {
 				}*/
 
 				gameStartUI.SetActive(false);
-				VectorWar.Init(localPort, numPlayers, players, 0 /*numSpectators*/);
+				VectorWar.Init(
+					localPort,
+					numPlayers,
+					players,
+					0 /*numSpectators*/,
+					ReadInputs,
+					Screen.safeArea.xMin,
+					Screen.safeArea.xMax,
+					Screen.safeArea.yMin,
+					Screen.safeArea.yMax
+				);
 			}
 			
 			_started = true;
@@ -166,6 +185,17 @@ namespace VectorWar {
 					_playerConfigs[i].gameObject.SetActive(!spectateModeToggle.isOn);
 				}
 			}
+		}
+		
+		private static VectorWar.ShipInput ReadInputs() {
+			VectorWar.ShipInput inputs = VectorWar.ShipInput.None;
+			
+			InputActionMap shipBattleActionMap = VectorWarGameManager.vectorWarInput.ShipBattleMap.Get();
+			for (int i = 0; i < shipBattleActionMap.actions.Count; i++) {
+				inputs |= (VectorWar.ShipInput) ((int) shipBattleActionMap.actions[i].ReadValue<float>() << i);
+			}
+			
+			return inputs;
 		}
 	}
 }

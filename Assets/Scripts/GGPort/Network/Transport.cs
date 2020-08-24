@@ -91,10 +91,7 @@ namespace GGPort {
 						Log($"recvfrom returned (len:{len}  from:{remoteIP.Address}:{remoteIP.Port}).{Environment.NewLine}");
 						IFormatter br = new BinaryFormatter();
 						using (MemoryStream ms = new MemoryStream(_receiveBuffer)) {
-							PeerMessage msg =
-								(PeerMessage) br.Deserialize(
-									ms
-								); // TODO deserialization probably doesn't work? why does it work for syncing but not input?
+							PeerMessage msg = (PeerMessage) br.Deserialize(ms);
 							messageReceivedEvent?.Invoke(remoteIP, msg);
 						} // TODO optimize refactor
 					} else {

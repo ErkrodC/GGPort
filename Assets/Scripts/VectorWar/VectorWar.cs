@@ -4,8 +4,6 @@ using System.Net;
 using System.Text;
 using GGPort;
 using System.Threading;
-using UnityEngine;
-using UnityEngine.InputSystem;
 
 //#define SYNC_TEST    // test: turn on synctest
 
@@ -17,6 +15,7 @@ namespace VectorWar {
 		private const int _FRAME_DELAY = 0;
 		private const int _MAX_PLAYERS = 64;
 		private const int _SIZE_OF_INPUT = sizeof(ShipInput);
+		private const int _FRAMES_PER_SECOND = 60;
 
 		private static GameState _gameState = new GameState();
 		private static readonly NonGameState _nonGameState = new NonGameState();
@@ -25,14 +24,7 @@ namespace VectorWar {
 		private static readonly byte[] _serializedLocalInput = new byte[_SIZE_OF_INPUT];
 		private static readonly ShipInput[] _syncedInputArray = new ShipInput[GameState.MAX_SHIPS];
 
-		private static readonly Keybind[] _keyBinds = {
-			new Keybind {keyCode = KeyCode.UpArrow, shipInput = ShipInput.Thrust},
-			new Keybind {keyCode = KeyCode.DownArrow, shipInput = ShipInput.Brake},
-			new Keybind {keyCode = KeyCode.LeftArrow, shipInput = ShipInput.CounterClockwise},
-			new Keybind {keyCode = KeyCode.RightArrow, shipInput = ShipInput.Clockwise},
-			new Keybind {keyCode = KeyCode.D, shipInput = ShipInput.Fire},
-			new Keybind {keyCode = KeyCode.S, shipInput = ShipInput.Bomb}
-		};
+		private static Func<ShipInput> _readInputs;
 
 		[Flags]
 		public enum ShipInput : byte {
@@ -45,9 +37,31 @@ namespace VectorWar {
 			Bomb = 1 << 5
 		}
 
-		public static void Init(ushort localPort, int numPlayers, Player[] players, int numSpectators) {
+		public static void Init(
+			ushort localPort,
+			int numPlayers,
+			Player[] players,
+			int numSpectators,
+			Func<ShipInput> readInputsFunc,
+			float screenBoundsXMin,
+			float screenBoundsXMax,
+			float screenBoundsYMin,
+			float screenBoundsYMax
+		) {
 			// Initialize the game state
-			_gameState.Init(numPlayers);
+			_readInputs = readInputsFunc;
+			if (_readInputs == null) {
+				// ER TODO add LogError api to LogUtil and use here. Keeps unity out of game sim to do it this way.
+				LogUtil.Log($"{nameof(_readInputs)} is not set.");
+			}
+
+			_gameState.Init(
+				numPlayers,
+				screenBoundsXMin,
+				screenBoundsXMax,
+				screenBoundsYMin,
+				screenBoundsYMax
+			);
 			_nonGameState.numPlayers = numPlayers;
 
 #if SYNC_TEST
@@ -95,9 +109,23 @@ namespace VectorWar {
 		}
 
 		// Create a new spectator session
-		public static void InitSpectator(ushort localPort, int numPlayers, IPEndPoint hostEndPoint) {
+		public static void InitSpectator(
+			ushort localPort,
+			int numPlayers,
+			IPEndPoint hostEndPoint,
+			float screenBoundsXMin,
+			float screenBoundsXMax,
+			float screenBoundsYMin,
+			float screenBoundsYMax
+		) {
 			// Initialize the game state
-			_gameState.Init(numPlayers);
+			_gameState.Init(
+				numPlayers,
+				screenBoundsXMin,
+				screenBoundsXMax,
+				screenBoundsYMin,
+				screenBoundsYMax
+			);
 			_nonGameState.numPlayers = numPlayers;
 
 			Session<GameState>.StartSpectating(
@@ -177,29 +205,22 @@ namespace VectorWar {
 		* transparently.
 		*/
 
-		private static bool _triggered;
-		private static ShipInput ReadInputs() {
-			ShipInput inputs = ShipInput.None;
-			
-			InputActionMap shipBattleActionMap = VectorWarGameManager.vectorWarInput.ShipBattleMap.Get();
-			for (int i = 0; i < shipBattleActionMap.actions.Count; i++) {
-				inputs |= (ShipInput) ((int) shipBattleActionMap.actions[i].ReadValue<float>() << i);
-			}
-			
-			return inputs;
-		}
-
 		// Run a single frame of the game.
 		public static void RunFrame() {
 			ErrorCode result = ErrorCode.Success;
 			int disconnectFlags = 0;
 
+			// ER TODO does this condition filter out spectators so as to not bother reading+sending their inputs?
 			if (_nonGameState.localPlayerHandle.handleValue != PlayerHandle.INVALID_HANDLE) {
 #if SYNC_TEST
 				input = rand(); // test: use random inputs to demonstrate sync testing
 #endif
 				// ER TODO generalize for varying sizes
-				_serializedLocalInput[0] = (byte) ReadInputs();
+				if (_readInputs != null) {
+					_serializedLocalInput[0] = (byte) _readInputs();
+				} else {
+					_serializedLocalInput[0] = 0;
+				}
 
 				// XXX LOH size should 4 bytes? check inside, erroneously using serializedInputLength?
 				result = _session.AddLocalInput(
@@ -326,7 +347,7 @@ namespace VectorWar {
 					_nonGameState.SetConnectState(info.disconnected.player, PlayerConnectState.Disconnected);
 					break;
 				case EventCode.TimeSync:
-					Thread.Sleep(1000 * info.timeSync.framesAhead / 60);
+					Thread.Sleep(1000 * info.timeSync.framesAhead / _FRAMES_PER_SECOND);
 					break;
 			}
 
@@ -422,11 +443,6 @@ namespace VectorWar {
 		// Free a save state buffer previously returned in vw_save_game_state_callback.
 		private static void OnFreeBuffer(object gameState) {
 			//free(buffer); // NOTE nothing for managed lang, though could prove useful nonetheless.
-		}
-
-		private struct Keybind {
-			public KeyCode keyCode;
-			public ShipInput shipInput;
 		}
 	}
 }

@@ -51,8 +51,8 @@ namespace VectorWar {
 				GameObject visualShip = _visualShips[shipIndex];
 
 				visualShip.SetActive(true);
-				visualShip.transform.position = new Vector3(ship.position.x, ship.position.y, 0);
-				visualShip.transform.rotation = Quaternion.AngleAxis(ship.heading, Vector3.forward);
+				visualShip.transform.position = new Vector3((float) ship.position.x, (float) ship.position.y, 0);
+				visualShip.transform.rotation = Quaternion.AngleAxis((float) ship.heading, Vector3.forward);
 			}
 		}
 	}

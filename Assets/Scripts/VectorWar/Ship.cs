@@ -1,24 +1,25 @@
 ﻿using System;
+using FixMath.NET;
 
 namespace VectorWar {
 	[Serializable]
 	public class Ship {
 		public const int STARTING_HEALTH = 100;
-		public const int SHIP_RADIUS = 15;
+		public static readonly Fix64 shipRadius = (Fix64) 15;
 		public const int SHIP_WIDTH = 8;
 		public const int SHIP_TUCK = 3;
-		public const float SHIP_THRUST = 0.06f;
-		public const float SHIP_MAX_THRUST = 4.0f;
-		public const float SHIP_BRAKE_SPEED = 0.6f;
-		public const int ROTATE_INCREMENT = 3;
+		public static readonly Fix64 shipThrust = (Fix64) 0.06f;
+		public static readonly Fix64 shipMaxThrust = (Fix64) 4.0f;
+		public static readonly Fix64 shipBrakeSpeed = (Fix64) 0.6f;
+		public static readonly Fix64 rotateIncrement = (Fix64) 3;
 		public const int MAX_BULLETS = 30;
 
-		public Vector2 position;
-		public Vector2 velocity;
-		public int radius;
-		public int heading;
+		public FixVector2 position;
+		public FixVector2 velocity;
+		public Fix64 radius;
+		public Fix64 heading;
 		public int health;
-		public int speed;
+		public Fix64 speed;
 		public int cooldown;
 		public int score;
 		public Bullet[] bullets = new Bullet[MAX_BULLETS];
@@ -43,8 +44,8 @@ namespace VectorWar {
 
 		public static unsafe int Size() {
 			return
-				sizeof(Vector2)
-				+ sizeof(Vector2)
+				sizeof(FixVector2)
+				+ sizeof(FixVector2)
 				+ sizeof(int) * 6
 				+ sizeof(Bullet) * MAX_BULLETS;
 		}
