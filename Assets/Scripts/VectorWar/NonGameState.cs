@@ -32,22 +32,23 @@ namespace VectorWar {
 
 		public PlayerHandle localPlayerHandle;
 		public readonly PlayerConnectionInfo[] players;
-		public int numPlayers;
+		public readonly int numPlayers;
 
 		public ChecksumInfo now;
 		public ChecksumInfo periodic;
 
-		public NonGameState() {
+		public NonGameState(int numPlayers) {
+			this.numPlayers = numPlayers;
 			players = new PlayerConnectionInfo[_MAX_PLAYERS];
 		}
 
 		public void SetConnectState(PlayerHandle handle, PlayerConnectState state) {
 			for (int i = 0; i < numPlayers; i++) {
-				if (players[i].handle.handleValue == handle.handleValue) {
-					players[i].connectProgress = 0;
-					players[i].state = state;
-					break;
-				}
+				if (players[i].handle.handleValue != handle.handleValue) { continue; }
+
+				players[i].connectProgress = 0;
+				players[i].state = state;
+				break;
 			}
 		}
 
@@ -59,21 +60,21 @@ namespace VectorWar {
 
 		public void SetDisconnectTimeout(PlayerHandle handle, long when, int timeout) {
 			for (int i = 0; i < numPlayers; i++) {
-				if (players[i].handle.handleValue == handle.handleValue) {
-					players[i].disconnectStart = when;
-					players[i].disconnectTimeout = timeout;
-					players[i].state = PlayerConnectState.Disconnecting;
-					break;
-				}
+				if (players[i].handle.handleValue != handle.handleValue) { continue; }
+
+				players[i].disconnectStart = when;
+				players[i].disconnectTimeout = timeout;
+				players[i].state = PlayerConnectState.Disconnecting;
+				break;
 			}
 		}
 
 		public void UpdateConnectProgress(PlayerHandle handle, int progress) {
 			for (int i = 0; i < numPlayers; i++) {
-				if (players[i].handle.handleValue == handle.handleValue) {
-					players[i].connectProgress = progress;
-					break;
-				}
+				if (players[i].handle.handleValue != handle.handleValue) { continue; }
+
+				players[i].connectProgress = progress;
+				break;
 			}
 		}
 

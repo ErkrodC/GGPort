@@ -17,14 +17,14 @@ namespace VectorWar {
 		private const int _SIZE_OF_INPUT = sizeof(ShipInput);
 		private const int _FRAMES_PER_SECOND = 60;
 
-		private static GameState _gameState = new GameState();
-		private static readonly NonGameState _nonGameState = new NonGameState();
+		private static GameState _gameState;
+		private static NonGameState _nonGameState;
 		private static Session<GameState> _session;
 		private static readonly byte[] _serializedSyncedInputArray = new byte[GameState.MAX_SHIPS * _SIZE_OF_INPUT];
 		private static readonly byte[] _serializedLocalInput = new byte[_SIZE_OF_INPUT];
 		private static readonly ShipInput[] _syncedInputArray = new ShipInput[GameState.MAX_SHIPS];
 
-		private static Func<ShipInput> _readInputs;
+		private static Func<ShipInput> _readInputsFunc;
 
 		[Flags]
 		public enum ShipInput : byte {
@@ -49,21 +49,22 @@ namespace VectorWar {
 			float screenBoundsYMax
 		) {
 			// Initialize the game state
-			_readInputs = readInputsFunc;
-			if (_readInputs == null) {
+			_readInputsFunc = readInputsFunc;
+			if (_readInputsFunc == null) {
 				// ER TODO add LogError api to LogUtil and use here. Keeps unity out of game sim to do it this way.
-				LogUtil.Log($"{nameof(_readInputs)} is not set.");
+				LogUtil.Log($"{nameof(_readInputsFunc)} is not set.");
 			}
 
-			_gameState.Init(
+			_gameState = new GameState(
 				numPlayers,
 				screenBoundsXMin,
 				screenBoundsXMax,
 				screenBoundsYMin,
 				screenBoundsYMax
 			);
-			_nonGameState.numPlayers = numPlayers;
-
+			
+			_nonGameState = new NonGameState(numPlayers);
+			
 #if SYNC_TEST
 			result = GGPOMain.ggpo_start_synctest(ref ggpo, ref cb, "vectorwar", num_players, sizeof(int), 1);
 #else
@@ -119,14 +120,15 @@ namespace VectorWar {
 			float screenBoundsYMax
 		) {
 			// Initialize the game state
-			_gameState.Init(
+			_gameState = new GameState(
 				numPlayers,
 				screenBoundsXMin,
 				screenBoundsXMax,
 				screenBoundsYMin,
 				screenBoundsYMax
 			);
-			_nonGameState.numPlayers = numPlayers;
+			
+			_nonGameState = new NonGameState(numPlayers);
 
 			Session<GameState>.StartSpectating(
 				out Session<GameState> _,
@@ -150,7 +152,7 @@ namespace VectorWar {
 		}
 
 		// Disconnects a player from this session.
-		public static void DisconnectPlayer(int player) {
+		private static void DisconnectPlayer(int player) {
 			if (player >= _nonGameState.numPlayers) { return; }
 
 			ErrorCode result = _session.DisconnectPlayer(_nonGameState.players[player].handle);
@@ -163,15 +165,9 @@ namespace VectorWar {
 		}
 
 		// Draws the current frame without modifying the game state.
-		public static void DrawCurrentFrame() {
-			GameRenderer.instance.Draw(_gameState, _nonGameState);
-			// TODO update unity visualization here
-		}
+		private static void DrawCurrentFrame() { GameRenderer.instance.Draw(_gameState, _nonGameState); }
 
-		/*
-		* Advances the game state by exactly 1 frame using the inputs specified
-		* for player 1 and player 2.
-		*/
+		// Advances the game state by exactly 1 frame using the inputs specified for player 1 and player 2.
 		private static void AdvanceFrame(ShipInput[] inputs, int disconnectFlags) {
 			_gameState.Update(inputs, disconnectFlags);
 
@@ -199,16 +195,11 @@ namespace VectorWar {
 			PerfMon<GameState>.ggpoutil_perfmon_update(ref _session, handles, count);
 		}
 
-		/*
-		* Read the inputs for player 1 from the keyboard.  We never have to
-		* worry about player 2.  GGPO will handle remapping his inputs 
-		* transparently.
-		*/
-
+		// Read the inputs for player 1 from the keyboard.  We never have to worry about player 2.
+		// GGPO will handle remapping his inputs transparently.
 		// Run a single frame of the game.
 		public static void RunFrame() {
 			ErrorCode result = ErrorCode.Success;
-			int disconnectFlags = 0;
 
 			// ER TODO does this condition filter out spectators so as to not bother reading+sending their inputs?
 			if (_nonGameState.localPlayerHandle.handleValue != PlayerHandle.INVALID_HANDLE) {
@@ -216,11 +207,9 @@ namespace VectorWar {
 				input = rand(); // test: use random inputs to demonstrate sync testing
 #endif
 				// ER TODO generalize for varying sizes
-				if (_readInputs != null) {
-					_serializedLocalInput[0] = (byte) _readInputs();
-				} else {
-					_serializedLocalInput[0] = 0;
-				}
+				_serializedLocalInput[0] = _readInputsFunc != null
+					? (byte) _readInputsFunc()
+					: byte.MinValue;
 
 				// XXX LOH size should 4 bytes? check inside, erroneously using serializedInputLength?
 				result = _session.AddLocalInput(
@@ -234,7 +223,13 @@ namespace VectorWar {
 			// ggpo will modify the input list with the correct inputs to use and
 			// return 1.
 			if (result.IsSuccess()) {
-				result = _session.SynchronizeInput(_serializedSyncedInputArray, _serializedSyncedInputArray.Length, ref disconnectFlags);
+				int disconnectFlags = 0;
+				result = _session.SynchronizeInput(
+					_serializedSyncedInputArray,
+					_serializedSyncedInputArray.Length,
+					ref disconnectFlags
+				);
+				
 				if (result.IsSuccess()) {
 					// inputs[0] and inputs[1] contain the inputs for p1 and p2.  Advance
 					// the game by 1 frame using those inputs.
@@ -245,32 +240,20 @@ namespace VectorWar {
 			DrawCurrentFrame();
 		}
 
-		/*
-		* Spend our idle time in ggpo so it can use whatever time we have left over
-		* for its internal bookkeeping.
-		*/
-		public static void Idle(int time) {
-			_session.Idle(time);
-		}
+		// Spend our idle time in ggpo so it can use whatever time we have left over for its internal bookkeeping.
+		public static void Idle(int time) { _session.Idle(time); }
 
 		public static void Exit() {
-			// TODO
-			/*gs = TODO_memsetZero;
-			ngs = TODO_memsetZero;*/
+			_gameState = null;
+			_nonGameState = null;
 
-			if (_session != null) {
-				_session.CloseSession();
-				_session = null;
-			}
+			_session?.CloseSession();
+			_session = null;
 
 			GameRenderer.instance = null;
 		}
 
-		/* 
-		* Simple checksum function stolen from wikipedia:
-		*
-		*   http://en.wikipedia.org/wiki/Fletcher%27s_checksum
-		*/
+		// Simple checksum function stolen from wikipedia: http://en.wikipedia.org/wiki/Fletcher%27s_checksum
 		public static int Fletcher32Checksum(byte[] data) { // TODO fix
 			short[] newData = new short[data.Length / 2];
 			for (int i = 0; i < data.Length; i++) {
@@ -280,7 +263,7 @@ namespace VectorWar {
 			return Fletcher32Checksum(newData);
 		}
 
-		public static int Fletcher32Checksum(short[] data) {
+		private static int Fletcher32Checksum(short[] data) {
 			int sum1 = 0xffff, sum2 = 0xffff;
 
 			int i = 0;
@@ -303,13 +286,8 @@ namespace VectorWar {
 			return (sum2 << 16) | sum1;
 		}
 
-		/*
-		* The begin game callback.  We don't need to do anything special here,
-		* so just return true.
-		*/
-		private static bool OnBeginGame() {
-			return true;
-		}
+		// The begin game callback.  We don't need to do anything special here, so just return true.
+		private static bool OnBeginGame() { return true; }
 
 		/*
 		* Notification from GGPO that something has happened.  Update the status
@@ -354,18 +332,14 @@ namespace VectorWar {
 			return true;
 		}
 
-		/*
-		* Notification from GGPO we should step forward exactly 1 frame
-		* during a rollback.
-		*/
+		// Notification from GGPO that we should step forward exactly 1 frame during a rollback.
 		private static bool OnAdvanceFrame(int flags) {
 			for (int i = 0; i < _serializedSyncedInputArray.Length; i++) { _serializedSyncedInputArray[i] = 0; }
-
-			int disconnectFlags = 0;
 
 			// Make sure we fetch new inputs from GGPO and use those to update
 			// the game state instead of reading from the keyboard.
 			// ER NOTE SynchronizeInput expects an array of primitives, TODO allow handling of enum arrays (i.e. flags)
+			int disconnectFlags = 0;
 			_session.SynchronizeInput(_serializedSyncedInputArray, _serializedSyncedInputArray.Length, ref disconnectFlags);
 			AdvanceFrame(DeserializeShipInputs(_serializedSyncedInputArray), disconnectFlags);
 			return true;
@@ -389,10 +363,7 @@ namespace VectorWar {
 			return true;
 		}
 
-		/*
-		* Save the current state to a buffer and return it to GGPO via the
-		* buffer and len parameters.
-		*/
+		// Save the current state to a buffer and return it to GGPO via the buffer and len parameters.
 		private static bool OnSaveGameState(out GameState gameState, out int checksum, int frame) {
 			gameState = (GameState) _gameState.Clone();
 			//_gameState.Serialize(_gameState.Size(), out byte[] buffer); // TODO probably a better way to get the checksum.
@@ -420,7 +391,7 @@ namespace VectorWar {
 					$"  ship {i} velocity:  {ship.velocity.x:F4}, {ship.velocity.y:F4}{Environment.NewLine}"
 				);
 				stringBuilder.Append($"  ship {i} radius:    {ship.radius}.{Environment.NewLine}");
-				stringBuilder.Append($"  ship {i} heading:   {ship.heading}.{Environment.NewLine}");
+				stringBuilder.Append($"  ship {i} headingDeg:   {ship.headingDeg}.{Environment.NewLine}");
 				stringBuilder.Append($"  ship {i} health:    {ship.health}.{Environment.NewLine}");
 				stringBuilder.Append($"  ship {i} speed:     {ship.speed}.{Environment.NewLine}");
 				stringBuilder.Append($"  ship {i} cooldown:  {ship.cooldown}.{Environment.NewLine}");

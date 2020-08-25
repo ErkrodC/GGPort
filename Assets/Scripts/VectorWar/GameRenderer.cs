@@ -52,7 +52,7 @@ namespace VectorWar {
 
 				visualShip.SetActive(true);
 				visualShip.transform.position = new Vector3((float) ship.position.x, (float) ship.position.y, 0);
-				visualShip.transform.rotation = Quaternion.AngleAxis((float) ship.heading, Vector3.forward);
+				visualShip.transform.rotation = Quaternion.AngleAxis((float) ship.headingDeg, Vector3.forward);
 			}
 		}
 	}

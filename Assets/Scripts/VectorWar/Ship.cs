@@ -17,7 +17,7 @@ namespace VectorWar {
 		public FixVector2 position;
 		public FixVector2 velocity;
 		public Fix64 radius;
-		public Fix64 heading;
+		public Fix64 headingDeg;
 		public int health;
 		public Fix64 speed;
 		public int cooldown;
@@ -30,7 +30,7 @@ namespace VectorWar {
 			position = other.position;
 			velocity = other.velocity;
 			radius = other.radius;
-			heading = other.heading;
+			headingDeg = other.headingDeg;
 			health = other.health;
 			speed = other.speed;
 			cooldown = other.cooldown;
